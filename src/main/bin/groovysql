@@ -20,4 +20,4 @@ JAVA_ENCAPSULATION_OPTIONS="-Dnet.snowflake.jdbc.enableBouncyCastle=TRUE \
 --add-opens=java.base/java.net=ALL-UNNAMED	\
 --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED"
 
-java $JAVA_ENCAPSULATION_OPTIONS -jar $BINDIR/groovysql-$VERSION-all.jar $@
+java $JAVA_ENCAPSULATION_OPTIONS -jar $BINDIR/groovysql-$VERSION-all.jar "$@"
