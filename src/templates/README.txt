@@ -8,9 +8,9 @@ To generate the project's README.md to PDF format -
 
 	cp ./src/templates/md2pdf  ~/bin/md2pdf
 
-3. copy the pandoc template to your local pandoc templates folder, creating the folder if necessary
+3. copy the pandoc templates (2 files) to your local pandoc templates folder, creating the folder if necessary
 
-	cp ./src/templates/eisvogel.latex to ~/.local/share/pandoc/templates/eisvogel.latex
+	cp ./src/templates/eisvogel.{beamer,latex} to ~/.local/share/pandoc/templates/
 
 4. executing "md2pdf README.md" should produce README.pdf
 

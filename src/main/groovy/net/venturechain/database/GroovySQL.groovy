@@ -13,11 +13,11 @@ class GroovySQL {
     static void main(String[] args) {
 
         var cliOptions = new CliBuilder(usage: "groovysql [options]", posix: true,
-                header: "Groovy SQL Client CLI version 2.9.0-4 (${GroovySystem.version}/${Runtime.version()})\nOptions:")
+                header: "Groovy SQL Client CLI version SEMANTIC_VERSION (${GroovySystem.version}/${Runtime.version()})\nOptions:")
 
         cliOptions.with {
             a(longOpt: 'append', 'output file append mode')
-            A(longOpt: 'authentication', 'specify secrets vault', args: 1)
+            A(longOpt: 'authentication', 'specify authentication method', args: 1)
             c(longOpt: 'config', 'specify database configuration file', args: 1)
             d(longOpt: 'database', 'specify database name', args: 1)
             f(longOpt: 'filein', 'specify input filename', args: 1)
@@ -66,7 +66,7 @@ class GroovySQL {
             }
         }
 
-        if (options.verbose >= 4) {
+        if (options.verbose >= 5) {
             println "System.properties:"
             for (key in System.properties.keySet().sort()) {
                 printf('%-30s   %s\n', key, System.properties[key])

@@ -4,11 +4,12 @@
 # since that doesn't seem possible via directly executed jars
 # and also serves as a way to control other options in future
 
-VERSION=2.9.0-4
+VERSION=SEMANTIC_VERSION
 
 BINDIR=$(dirname $0)
 
-JAVA_ENCAPSULATION_OPTIONS="--add-opens=java.base/java.nio=ALL-UNNAMED	\
+JAVA_ENCAPSULATION_OPTIONS="-Dnet.snowflake.jdbc.enableBouncyCastle=TRUE \
+--add-opens=java.base/java.nio=ALL-UNNAMED	\
 --add-opens=java.base/java.util=ALL-UNNAMED	\
 --add-opens=java.base/java.lang=ALL-UNNAMED	\
 --add-opens=java.base/java.lang.invoke=ALL-UNNAMED	\
@@ -19,4 +20,4 @@ JAVA_ENCAPSULATION_OPTIONS="--add-opens=java.base/java.nio=ALL-UNNAMED	\
 --add-opens=java.base/java.net=ALL-UNNAMED	\
 --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED"
 
-java $JAVA_ENCAPSULATION_OPTIONS -jar $BINDIR/groovysql-$VERSION-all.jar $@
+java $JAVA_ENCAPSULATION_OPTIONS -jar $BINDIR/groovysql-$VERSION-all.jar "$@"

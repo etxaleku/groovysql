@@ -91,7 +91,7 @@ GROOVYBASE=$PROJECTBASE/src/main/groovy
 TESTBASE=$PROJECTBASE/tests
 RUNFORMAT=classfiles
 GROOVY_HOME=/usr/local/sdkman/candidates/groovy/current
-GROOVYSQL_VERSION=2.9.0-4
+GROOVYSQL_VERSION=SEMANTIC_VERSION
 PATH=$GROOVY_HOME/bin:$PATH
 
 trap "exit 255" 1 2 3 15
@@ -160,10 +160,10 @@ classfiles)
         EXEC="groovy"
         GROOVYSQL=net/venturechain/database/GroovySQL.groovy
         export CLASSPATH
-        CLASSPATH+=:/app/d9/lib/extensions/jdbc-drivers/snowflake-1.x/snowflake-jdbc.jar
+        CLASSPATH+=:/app/d9/lib/extensions/jdbc-drivers-other/snowflake-3.x/snowflake-jdbc-3.24.2.jar
         CLASSPATH+=:/app/d9/lib/extensions/jdbc-drivers/vdp-9/denodo-vdp-jdbcdriver.jar
-        CLASSPATH+=:/app/denodo/lib/postgresql-42.7.3.jar
-        CLASSPATH+=:/app/denodo/lib/mysql-connector-j-8.4.0.jar
+        CLASSPATH+=:/app/denodo/lib/postgresql-42.7.7.jar
+        CLASSPATH+=:/app/denodo/lib/mysql-connector-j-9.3.0.jar
         CLASSPATH+=:/app/denodo/lib/sqlite-jdbc-3.46.0.0.jar
         CLASSPATH+=:/app/denodo/lib/commons-csv-1.10.0.jar
         CLASSPATH+=:/app/denodo/lib/jline-3.26.1.jar
@@ -306,9 +306,9 @@ To run a single file-based tests with JSON output
 
   test.sh -F customer json
 
-To run a stdio-based test in all formats with verbose level 2, and timestamps and extended options
+To run a stdio-based test in all formats with verbose level 2, and timestamps
 
-  test.sh -S -v 2 -O timestamps -O extended
+  test.sh -S -v 2 -O timestamps
 
 To run a command-line test in XML format
 

@@ -1,0 +1,1 @@
+SELECT * from information_schema.databases;

@@ -1,0 +1,100 @@
+#!/bin/bash
+#
+# Called by "git commit" with one argument, the name of the file
+# that has the commit message.  The hook should exit with non-zero
+# status after issuing an appropriate message if it wants to stop the
+# commit.  The hook is allowed to edit the commit message file.
+
+# Uncomment the below to add a Signed-off-by line to the message.
+# Doing this in a hook is a bad idea in general, but the prepare-commit-msg
+# hook is more suited to it.
+#
+# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+# grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
+
+COMMIT_MSG="$1"
+
+function catch_duplicate_signoffs {
+	if [[ "" != "$(grep '^Signed-off-by: ' "$COMMIT_MSG" | sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" ]]
+	then
+		echo "Duplicate Signed-off-by lines." >&2
+		exit 1
+	fi
+
+	return 0
+}
+
+function enforce_conventional_commits {
+	GIT_TOP_LEVEL=$(git rev-parse --show-toplevel)
+	CONFIG=$GIT_TOP_LEVEL/.git/hooks/commit-msg.json
+
+	ENABLED=$(jq -r .enabled $CONFIG)
+	REVERT=$(jq -r .revert $CONFIG)
+	TYPES=$(jq -r '.types[]' $CONFIG)
+	MIN_LENGTH=$(jq -r .length.min $CONFIG)
+	MAX_LENGTH=$(jq -r .length.max $CONFIG)
+
+	[[ ! -f $CONFIG || $ENABLED != true ]] && exit 0	# no config file or conventional commits disabled then allow
+
+	REGEX="^("						# start building the regex
+
+	if $REVERT
+	then	REGEX+="revert: )?("				# append with pattern to optionally match revert message
+	fi
+
+	for TYPE in ${TYPES[@]}
+	do	REGEX+="$TYPE|"					# append each type as OR condition
+	done
+
+	REGEX=${REGEX/%|/}					# match final | and strip it
+
+	REGEX+=")(\(.+\))?: "					# append remainder of regex pattern
+
+	REGEX+=".{$MIN_LENGTH,$MAX_LENGTH}$"			# enforce min/max length
+
+	MSG=$(head -1 $COMMIT_MSG)
+
+	MERGE="^Merge branch .*"				# special case for merge commit messages
+
+	[[ "$MSG" =~ $MERGE ]] && exit 0			# allow merge commit messages
+
+	# check if the commit message passes the regex validation
+	# if it fails, print out a custom error message and abort the commit
+
+	if [[ ! "$MSG" =~ $REGEX ]]
+	then
+		echo "ERROR: invalid conventional commit message: '$MSG'"
+		echo
+		echo "Format: <type>(scope): <description>"
+		echo
+		echo "Commit message must be between $MIN_LENGTH and $MAX_LENGTH characters"
+		echo
+		echo "Valid types:"
+	        echo "${TYPES[@]}" | sed 's/^/  /'
+		echo
+		echo "Scope is optional"
+		echo
+		echo "Example conventional commit messages:"
+		echo "  docs: correct spelling of CHANGELOG"
+		echo "  fix(api): correct auth handling"
+		echo "  feat!: require authentication"
+		echo "  ! indicates a breaking change"
+		echo
+		echo "Config rules for $GIT_TOP_LEVEL: $CONFIG"
+		exit 1
+	fi
+
+	REGEX='\.\s*$'						# period followed by zero or more whitespace at eol
+
+	if [[ $MSG =~ $REGEX ]]
+	then
+		echo "Commit message: $MSG"
+		echo "Commit messages should not end with a period"
+		exit 1
+	fi
+
+	return 0
+}
+
+catch_duplicate_signoffs
+enforce_conventional_commits

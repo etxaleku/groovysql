@@ -21,10 +21,11 @@ leveraging the [jline3 library](https://jline.github.io/).
 
 The simplest approach to deploying GroovySQL is to download the latest shell and jar file from the Releases and place
 them in a location within your execution path (`$PATH`). GroovySQL does not require anything to be installed other than
-Java. All other requirements are self-contained in the GroovySQL jar file. In particular there is no requirement to
-install Groovy or any database drivers, GroovySQL will locate all those artifacts in its jar file at runtime. The jar
-file is not extracted or installed anywhere. Recommendation is to copy both files to `/usr/local/bin`, provided it is in
-the execution path (`$PATH`).
+Java (v17 recommended/tested). All other requirements are self-contained in the GroovySQL jar file. In particular there
+is no requirement to install Groovy or any database drivers, GroovySQL will locate all those artifacts in its jar file
+at runtime. The jar file is not extracted or installed anywhere. Recommendation is to copy both files to
+`/usr/local/bin`, provided it is in the execution path (`$PATH`). The groovysql jar contains the Denodo, Snowflake,
+Postgres, MySQL, and SQLite database drivers as well as Groovy itself.
 
 ## Building GroovySQL
 
@@ -71,12 +72,12 @@ output while industry standard packages (insuring standards compliance) handle o
 output formats.
 
 The `--jsonstyle` option, used with json mode, allows selecting between all keys and values being quoted (the default)
-or all keys and string values being quoted (with numeric values unquoted) as JSON allows both approaches.
+or all keys and string values being quoted (with numeric and null values unquoted) as JSON allows both approaches.
 
 GroovySQL supports various JSON styles - "quoted", "standard", and "spread". The default is _quoted_ and results in all
-values being quoted while _standard_ does not quote integer and floating point numeric values. The _spread_ style is a
-variant of standard that uses the Groovy spread operator to produce the same output as _standard_. JSON keys are always
-quoted in compliance with JSON standards.
+values being quoted while _standard_ does not quote integer and floating point numeric values or nulls. The _spread_
+style is a variant of standard that uses the Groovy spread operator to produce the same output as _standard_. JSON keys
+are always quoted in compliance with JSON standards.
 
 GroovySQL is designed for use in production batch operations and is careful to avoid overwriting any existing files and
 will abort in the event of a conflict unless the _append_ option is in effect in which case it will append the output to
@@ -90,8 +91,8 @@ through other mechanisms, e.g. file redirection, etc.
 Either the short or long option can be used, with the < arg> supplied as needed.
 
 The `--config` option allows the database connection information to be stored in a configuration file and supplied as a
-single option for convenience. It is shorthand for specifying the `--scheme`, `--node`, `--database`, `--user`, and
-`--password` options.
+single option for convenience. It is handy for specifying the `--scheme`, `--node`, `--database`, `--user`, and
+`--password` options, as well as other options.
 
 | short | long option              | description                                    |
 |:-----:|--------------------------|------------------------------------------------|
@@ -123,11 +124,15 @@ output to the existing file instead.
 
 ### `-A|--authentication <arg>`
 
-Specify authentication using various secrets management systems. Currently supported authentication stores are:
+Specify authentication using various secrets management systems. Default value can be set in config file as
+`dbAuthentication`.
+
+Currently supported authentication stores are:
 
     Azure KeyVault ................ azure:key-vault-name:key
     Google Secret Manager ......... gcp:secret-name
     AWS Secrets Manager ........... aws:secret-id
+    KeyPair ....................... keypair:~/.keys/rsa-key.p8:passphrase
 
 ### `-c|--config <arg>`
 
@@ -138,8 +143,7 @@ added advantage that the connection details are not visible through system monit
 
 ### `-d|--database <arg>`
 
-Specifies the database name to connect to. Can also be specified through a config file as dbName (see `--config`
-option).
+Specifies the database name to connect to. Default value can be set in config file as `dbName`.
 
 ### `-f|--filein <arg>`
 
@@ -148,7 +152,7 @@ directives, see [Directives](#directives).
 
 ### `-F|--format <arg>`
 
-Specify desired output format. Valid formats are:
+Specify desired output format. Default value can be set in config file as `format`. Valid formats are:
 
     text
     csv
@@ -158,7 +162,8 @@ Specify desired output format. Valid formats are:
 
 ### `-H|--csvheaders`
 
-Specifies column headers should be generated for CSV output.  By default CSV output does not include column headers.
+Specifies column headers should be generated for CSV output. Default value can be set in config file as `csvheaders`. If
+not set in config file or command line option then csvheaders defaults to false.
 
 ### `-h|--help`
 
@@ -172,16 +177,16 @@ Run in interactive mode with editing and history support provided by the jline3 
 
 Specify JSON style of "quoted" or "standard" for numeric values. The
 [JSON standard](https://www.rfc-editor.org/rfc/rfc8259) requires that JSON keys be quoted, however it supports numeric
-values (which are not quoted). With business data processing it is sometimes preferable to quote all values as well, as
-that avoids any issues with non-compliant numeric values such as "not a number" (NaN), etc. The default style that
-GroovySQL uses is to quote all values (`--jsonstyle=quoted`).
+values and nulls (neither of which are quoted). With business data processing it is sometimes preferable to quote all
+values as well, as that avoids any issues with non-compliant numeric values such as "not a number" (NaN), etc. 
+Default value can be set in config file as `jsonstyle`.
 
 ### `-n|--node <arg>`
 
 Specify database node/host name, optionally including a port specification. Node/host names can be any valid TCP/IP
 specification - numeric IP address, "localhost", simple hostnames, or fully qualified domain names. Optionally the
-node/host name can be followed by a colon and port specification, e.g. "localhost:9999". Can also be specified through a
-config file as dbHost (see `--config` option).
+node/host name can be followed by a colon and port specification, e.g. "localhost:9999". Default value can be set in 
+config file as `dbHost`.
 
 ### `-o|--fileout <arg>`
 
@@ -190,12 +195,11 @@ already exists then see the `--append` option for controlling the behavior in th
 
 ### `-p|--password <arg>`
 
-Specify database password. Can also be specified through a config file as dbPassword (see `--config` option).
+Specify database password. Default value can be set in config file as `dbPassword`.
 
 ### `-s|--scheme <arg>`
 
-Database scheme, see [Schemes](#schemes). Can also be specified through a config file as dbScheme (see `--config`
-option).
+Database scheme, see [Schemes](#schemes). Default value can be set in config file as `dbScheme`.
 
 ### `-S|--sql <arg>`
 
@@ -203,7 +207,8 @@ Specify a SQL statement to be executed.
 
 ### `-t|--timestamps`
 
-Timestamp all output messages, resultSets are excluded (of course).
+Timestamp all output messages, resultSets are excluded (of course). Default value can be set in config file as 
+`timestamps`.
 
 ### `-T|--testconnect <arg>`
 
@@ -212,7 +217,7 @@ Run a connection test, arg is `N@W`. Diagnostic scenarios can benefit from addin
 
 ### `-u|--user <arg>`
 
-Specify database username. Can also be specified through a config file as dbUser (see `--config` option).
+Specify database username. Default value can be set in config file as `dbUser`.
 
 ### `-v|--verbose <arg>`
 
@@ -220,14 +225,15 @@ Specify verbose level. See [Verbose Levels](#verbose-levels) for details.
 
 ### `-w|--width <arg>`
 
-Limit maximum text column width. When using the `--format text` option, this option limits the displayed column width.
-The default column width is 30. Column width settings can also be controlled through the `.width` control record
+Limit maximum text column width. When using the `--format text` option, this option limits the displayed column 
+width. Default value can be set in config file as `width`. If not set anywhere then the default column width is 30. 
+Column width settings can also be controlled through the `.width` control record
 directive (see [Directives](#directives)).
 
 ## Schemes
 
-GroovySQL uses a URL of `jdbc:<scheme>://<node>/<database>` to connect to the database. Schemes currently supported by
-GroovySQL are:
+GroovySQL uses a URL of `jdbc:<scheme>://<node>/<database>` to connect to the database. Schemes, sometimes referred to
+as subprotocols, currently supported by GroovySQL are:
 
     vdb
     denodo
@@ -245,7 +251,8 @@ The dbClass for the connection defaults to the standard DriverManager class base
     mysql ......................... com.mysql.cj.jdbc.Driver
     sqlite ........................ org.sqlite.JDBC
 
-In nonstandard situations the dbClass can be overridden through the Config file, typically for database driver debugging.
+In nonstandard situations the dbClass can be overridden through the Config file, typically for database driver
+debugging.
 
 ## Usage
 
@@ -281,9 +288,10 @@ GroovySQL supports various verbose levels as well as a timestamp option for runt
 
     level 0 - no messages (except data of course)
     level 1 - basic messages (version info, open/close - default)
-    level 2 - enhanced messages (adds open/close success, query audit)
-    level 3 - debug messages (adds input trace, text format field adjustments)
-    level 4 - debug messages (adds system.properties display)
+    level 2 - enhanced messages (adds open/close success, authentication info, query audit)
+    level 3 - debug messages (adds input trace)
+    level 4 - debug messages (adds text format field adjustments)
+    level 5 - debug messages (adds system.properties display)
 
 While level 1 is the default, setting `--verbose=0` allows GroovySQL to be used in pipelines. For example, piping output
 to [xmlstarlet(1)](https://xmlstar.sourceforge.net/doc/UG/xmlstarlet-ug.html)
@@ -294,13 +302,14 @@ or [jq(1)](https://jqlang.github.io/jq/manual/) for postprocessing.
 Config files are optional files containing database connection parameters for a given database. They are written
 in [TOML format](https://toml.io/en/) and support the following parameters:
 
-    dbUser      - database username
-    dbPassword  - database password
-    dbScheme    - JDBC scheme (see Schemes)
-    dbHost      - TCP network address (hostname:port)
-    dbName      - database name
-    dbOptions   - database options added to the database URL (see Examples)
-    dbClass     - database driver class name (defaults based on dbScheme)
+    dbUser           - database username
+    dbPassword       - database password
+    dbAuthentication - authentication style
+    dbScheme         - JDBC scheme (see Schemes)
+    dbHost           - TCP network address (hostname:port)
+    dbName           - database name
+    dbOptions        - database options added to the database URL (see Examples)
+    dbClass          - database driver class name (defaults based on dbScheme)
 
 Most of these parameters can also be specified through their own option, e.g. `--user` for dbUser, `--node` for dbHost,
 etc. None of the parameters is required in a Config file. If an option appears in a Config file and also is specified on
@@ -309,11 +318,17 @@ the command line then the command line setting overrides, leaving the Config fil
 The dbClass parameter is entirely optional as the dbScheme will automatically set a default dbClass. Setting dbClass
 will override the default. There is no command line option to set dbClass.
 
-A common use case is to use a Config file with dbScheme, dbHost, dbName, and dbOptions specified and leverage the
-`--authentication` option to handle the authentication aspect.
+The dbAuthentication parameter supports various authentication approaches and is formatted as a colon-separated string
+as follows:
 
-When using simple user/password directly, the use of Config files keeps passwords off of system monitors and is
-recommended.
+     azure:<key-vault-name>:<secret-name>
+     gcp:<secret-name>
+     aws:<secret-id>
+     keypair:<private-key-file-name>:<passphrase>     # encrypted private key
+     keypair:<private-key-file-name>                  # unencrypted private key
+
+When using simple user/password or authentication passphrases, the use of Config files keeps passwords and passphrases
+off of system monitors and is recommended.
 
 Config files are TOML formatted and therefore support comments (#) as is customary.
 
@@ -351,13 +366,13 @@ File: itemdb.config
 
 Specifying the dbClass in the config file is optional. GroovySQL uses a default dbClass based on the dbScheme but if a
 dbClass is provided then it will override the default. The dbOptions values are concatenated together with
-ampersands (&) and included in the JDBC URL generated to connect to the database. The opt1/opt2/opt3 identifiers serve
-to avoid key duplication and control ordering (in case that was important). Any identifiers could be used instead, e.g.
-a/b/c.
+ampersands (&) and appended to the generated JDBC URL as parameters to connect to the database. The opt1/opt2/opt3
+identifiers serve to avoid key duplication and control ordering (in case that was important). Any identifiers could be
+used instead, e.g. a/b/c instead of opt1/opt2/opt3.
 
 This example generates a connection JDBC URL of:
 
-    jdbc:denodo://dbhost.mydomain.com:9999/itemdb&queryTimeout=1500&chunkTimeout=10&chunkSize=500
+    jdbc:denodo://dbhost.mydomain.com:9999/itemdb?queryTimeout=1500&chunkTimeout=10&chunkSize=500
 
 File: item-extract.sql
 

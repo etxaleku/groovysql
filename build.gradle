@@ -35,7 +35,7 @@ group = 'net.venturechain.database'
 repositories {
     mavenCentral()
     flatDir {
-        dirs    '/app/d9/lib/extensions/jdbc-drivers/snowflake-1.x',
+        dirs    '/app/d9/lib/extensions/jdbc-drivers-other/snowflake-3.x',
                 '/app/d9/lib/extensions/jdbc-drivers/vdp-9'
     }
 }
@@ -54,11 +54,13 @@ dependencies {
     implementation 'org.jline:jline:3.26.1'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
     implementation 'org.slf4j:slf4j-nop:2.0.16'
-    implementation 'org.postgresql:postgresql:42.7.3'
-    implementation 'com.mysql:mysql-connector-j:8.4.0'
+    implementation 'org.postgresql:postgresql:42.7.7'
+    implementation 'com.mysql:mysql-connector-j:9.3.0'
     implementation 'org.xerial:sqlite-jdbc:3.46.0.1'
+    implementation 'org.apache.ivy:ivy:2.5.3'
     implementation 'com.azure.resourcemanager:azure-resourcemanager-keyvault:2.44.0'
-    implementation name: 'snowflake-jdbc'
+    implementation 'com.azure:azure-identity:1.16.2'
+    implementation name: 'snowflake-jdbc-3.24.2'
     implementation name: 'denodo-vdp-jdbcdriver'
 
     // used by gradle (only) to integrate with maven
@@ -95,6 +97,7 @@ tasks.register("myConfigurations") {
 
 // had to fully qualify this after switching to GradleUp/shadow 8.3.0
 tasks.withType(com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    zip64 true
     mergeGroovyExtensionModules()
 }
 

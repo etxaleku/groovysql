@@ -1,0 +1,12 @@
+SELECT 
+  m.name as table_name, 
+  p.name as column_name
+FROM 
+  sqlite_master AS m
+JOIN 
+  pragma_table_info(m.name) AS p
+WHERE
+  m.type = 'table' 
+ORDER BY 
+  m.name, 
+  p.cid;

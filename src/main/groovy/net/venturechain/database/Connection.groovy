@@ -1,5 +1,11 @@
 package net.venturechain.database
 
+import com.azure.identity.DefaultAzureCredentialBuilder
+import com.azure.security.keyvault.secrets.SecretClient
+import com.azure.security.keyvault.secrets.SecretClientBuilder
+import com.azure.security.keyvault.secrets.models.KeyVaultSecret
+import com.azure.security.keyvault.secrets.models.SecretProperties
+
 import groovy.sql.Sql
 
 import groovy.cli.commons.OptionAccessor
@@ -69,11 +75,11 @@ class Connection {
 
     void displayOutput(Double level, messageObject) {
         String theLevel = String.valueOf(level)
-        Integer displayLevel = theLevel.substring(0,theLevel.indexOf(".")) as Integer
-        Integer displayIndent = theLevel.substring(theLevel.indexOf(".")+1) as Integer
+        Integer displayLevel = theLevel.substring(0, theLevel.indexOf(".")) as Integer
+        Integer displayIndent = theLevel.substring(theLevel.indexOf(".") + 1) as Integer
         if (Math.abs(m_verbose) >= displayLevel) {
             String message = messageObject
-            message.replaceAll("\t","    ").split('\n').each { String fragment ->
+            message.replaceAll("\t", "    ").split('\n').each { String fragment ->
                 if (m_timestamps) print "${timestamp()} :: "
                 println " " * displayIndent + fragment
             }
@@ -107,82 +113,91 @@ class Connection {
 
     Connection(OptionAccessor options) {
 
-        m_dbUser = options.user
-        m_dbPassword = options.password
-        m_dbName = options.database
-        m_dbHost = options.node
-        m_dbScheme = options.scheme
-        m_authentication = options.authentication
-
         m_dbConfigFile = options.config
 
+        // load defaults from config file
+        if (m_dbConfigFile) {
+            m_dbConfig = new TomlSlurper().parse(new File(m_dbConfigFile))
+            m_dbUser = m_dbConfig?.dbUser
+            m_dbPassword = m_dbConfig?.dbPassword
+            m_dbHost = m_dbConfig?.dbHost
+            m_dbScheme = m_dbConfig?.dbScheme
+            m_dbName = m_dbConfig?.dbName
+            m_authentication = m_dbConfig?.dbAuthentication
+            m_timestamps = m_dbConfig?.timestamps
+            m_csvHeaders = m_dbConfig?.csvheaders
+            m_jsonStyle = m_dbConfig?.jsonstyle ?: "standard"
+            m_format = m_dbConfig?.format ?: "text"
+            m_width = m_dbConfig?.width ?: 30
+            m_verbose = m_dbConfig?.verbose ?: -1
+            m_dbOptions = m_dbConfig?.dbOptions?.collect { it.value }?.join('&')
+            m_dbClass = m_dbConfig?.dbClass
+        }
+
+        m_dbOptions ?= ""
+
+        // command line option overrides config file default
+        m_dbUser = options.user ?: m_dbUser
+        m_dbPassword = options.password ?: m_dbPassword
+        m_dbHost = options.node ?: m_dbHost
+        m_dbScheme = options.scheme ?: m_dbScheme
+        m_dbName = options.database ?: m_dbName
+        m_authentication = options.authentication ?: m_authentication
+        m_timestamps = options.timestamps ?: m_timestamps
+        m_csvHeaders = options.csvheaders ?: m_csvHeaders
+        m_jsonStyle = options.jsonstyle ?: (m_jsonStyle ?: "quoted")
+        m_format = (options.format ?: m_format).toLowerCase()
+        m_width = options.width ?: m_width
+        if (options.verbose != -1) {
+            m_verbose = options.verbose
+        }
+
+        // no config file settings
+        m_fileIn = options.filein ?: "/dev/stdin"
+        m_fileOut = options.fileout ?: "/dev/stdout"
+
         m_sqlStatement = (options.sql ?: "") as String
-
-        m_timestamps = (options.timestamps ?: false)
-
-        m_fileIn = (options.filein ?: "/dev/stdin")
-        m_fileOut = (options.fileout ?: "/dev/stdout")
-        m_append = options.append
-
-        m_csvHeaders = options.csvheaders
-        m_jsonStyle = (options.jsonstyle ?: "quoted")
-        m_format = (options.format ?: "text").toLowerCase()
-        m_width = (options.width ?: 30)
-
-        m_verbose = options.verbose
 
         m_returnCode = 0
 
         Sql.LOG.level = java.util.logging.Level.OFF     // turn off groovy.sql default logging
 
-        if (m_dbConfigFile) {
-            m_dbConfig = new TomlSlurper().parse(new File(m_dbConfigFile))
-            m_dbUser = m_dbConfig.dbUser
-            m_dbPassword = m_dbConfig.dbPassword
-            m_dbScheme = m_dbConfig.dbScheme
-            m_dbHost = m_dbConfig.dbHost
-            m_dbName = m_dbConfig.dbName
-            m_dbClass = m_dbConfig.dbClass
-            m_dbOptions = m_dbConfig.dbOptions.collect { it.value }.join('&')
-        }
-
         switch (m_dbScheme) {
             case "vdb":
             case "denodo":
-                m_dbClass = m_dbClass ?: "com.denodo.vdp.jdbc.Driver"
-                m_dbOptions = m_dbOptions ?:
-                        "queryTimeout=0" +                              // 0 ms = infinite
-                                "&chunkTimeout=1000" +                  // fetch flush @ 10 secs
-                                "&chunkSize=5000"                       // fetch flush @ 500 rows
-                m_dbOptions = "?" + m_dbOptions
+                m_dbClass ?= "com.denodo.vdp.jdbc.Driver"
+                m_dbOptions ?= "queryTimeout=0" +               // 0 ms = infinite
+                        "&chunkTimeout=1000" +                  // fetch flush @ 10 secs
+                        "&chunkSize=5000"                       // fetch flush @ 500 rows
+                m_dbOptions = "?${m_dbOptions}"
                 m_dbUrl = "jdbc:${m_dbScheme}://${m_dbHost}/${m_dbName}"
                 m_dbDriverVersion = "Denodo JDBC " +
                         getDbDriverVersion("conf/DriverConfig.properties",
                                 "VDBJDBCDatabaseMetadata.driverVersion", "VDBJDBCDatabaseMetadata.driverUpdateVersion")
                 break
             case "snowflake":
-                m_dbClass = m_dbClass ?: "net.snowflake.client.jdbc.SnowflakeDriver"
-                m_dbName = "?db=${m_dbName}"
-                m_dbOptions = m_dbOptions ?: "queryTimeout=0"
-                m_dbOptions = "&" + m_dbOptions
+                m_dbClass ?= "net.snowflake.client.jdbc.SnowflakeDriver"
+                m_dbName = m_dbName ? "?db=${m_dbName}" : null
+                m_dbOptions ?= "queryTimeout=0"
+                m_dbOptions = "&${m_dbOptions}"
                 m_dbUrl = "jdbc:${m_dbScheme}://${m_dbHost}/${m_dbName}"
                 m_dbDriverVersion = "Snowflake JDBC " +
                         getDbDriverVersion("net/snowflake/client/jdbc/version.properties", "version")
                 break
             case "postgresql":
-                m_dbClass = m_dbClass ?: "org.postgresql.Driver"
+                m_dbClass ?= "org.postgresql.Driver"
                 m_dbUrl = "jdbc:${m_dbScheme}://${m_dbHost}/${m_dbName}"
                 var driver = new org.postgresql.Driver()
                 m_dbDriverVersion = "Postgres JDBC ${driver.getMajorVersion()}.${driver.getMinorVersion()}"
                 break
             case "mysql":
-                m_dbClass = m_dbClass ?: "com.mysql.cj.jdbc.Driver"
+                m_dbClass ?= "com.mysql.cj.jdbc.Driver"
                 m_dbUrl = "jdbc:${m_dbScheme}://${m_dbHost}/${m_dbName}"
                 var driver = new com.mysql.cj.jdbc.Driver()
                 m_dbDriverVersion = "MySQL JDBC ${driver.getMajorVersion()}.${driver.getMinorVersion()}"
                 break
             case "sqlite":
-                m_dbClass = m_dbClass ?: "org.sqlite.JDBC"
+                m_dbClass ?= "org.sqlite.JDBC"
                 m_dbUrl = "jdbc:${m_dbScheme}://${m_dbHost}/${m_dbName}"
                 var driver = new org.sqlite.JDBC()
                 m_dbDriverVersion = "SQLite3 JDBC ${driver.getMajorVersion()}.${driver.getMinorVersion()}"
@@ -192,36 +207,61 @@ class Connection {
         }
 
         if (Math.abs(m_verbose) >= 1) {
-            displayOutput(1, "GroovySQL 2.9.0-4 powered by Groovy " +
+            displayOutput(1, "GroovySQL SEMANTIC_VERSION powered by Groovy " +
                     "${GroovySystem.version}/${Runtime.version()} with ${m_dbDriverVersion}")
         }
 
+        Map authProperties = [:]
+
         switch (m_authentication) {
-            case ~/azure:/:
-//                AzureProfile profile = new AzureProfile(AzureEnvironment.AZURE);
-//                TokenCredential credential = new DefaultAzureCredentialBuilder()
-//                        .authorityHost(profile.getEnvironment().getActiveDirectoryEndpoint())
-//                        .build();
-//                KeyVaultManager manager = KeyVaultManager
-//                        .authenticate(credential, profile);
+            case ~/azure:.*/:
+                def (_, keyVaultName, keySecretName) = m_authentication.split(':') as List
+                String keyVaultUri = "https://${keyVaultName}.vault.azure.net"
+                SecretClient secretClient = new SecretClientBuilder()
+                        .vaultUrl(keyVaultUri)
+                        .credential(new DefaultAzureCredentialBuilder().build())
+                        .buildClient()
+                KeyVaultSecret keySecret = secretClient.getSecret(keySecretName)
+                authProperties.user = m_dbUser
+                authProperties.password = keySecret.value
+                displayOutput(2, "azure keyvault authentication (keyvault: ${keyVaultName}, secret:${keySecretName})")
                 break
-            case ~/gcp:/:
+            case ~/gcp:.*/:
+                displayOutput(2, "gcp secrets manager authentication")
                 break
-            case ~/aws:/:
+            case ~/aws:.*/:
+                displayOutput(2, "aws secrets authentication")
                 break
+            case ~/keypair:.*/:
+                def (_, keyFile, keyPassword) = m_authentication.split(':') as List
+                if (!new File(keyFile).canRead()) {
+                    throw new IllegalArgumentException("unable to read private key file: ${keyFile}")
+                }
+                authProperties.private_key_file = keyFile
+                if (keyPassword) {
+                    authProperties.private_key_pwd = keyPassword
+                    authProperties.private_key_security = "encrypted"
+                } else {
+                    authProperties.private_key_security = "unencrypted"
+                }
+                displayOutput(2, "keypair authentication with ${authProperties.private_key_security} private_key_file = ${keyFile}")
+                break
+            default:
+                authProperties.user = m_dbUser
+                authProperties.password = m_dbPassword
+                displayOutput(2, "basic authentication")
         }
 
         m_connectionParameters = [
-                url     : "${m_dbUrl}${m_dbOptions}",
-                user    : m_dbUser,
-                password: m_dbPassword,
-                driver  : m_dbClass
+                url       : "${m_dbUrl}${m_dbOptions}",
+                driver    : m_dbClass,
+                properties: authProperties as Properties
         ]
 
         if (!options.testconnect) {
             displayOutput(1, "opening connection to ${m_dbUrl}")
 
-            m_dbOptions.tokenize('?&').each {
+            m_dbOptions?.tokenize('?&')?.each {
                 displayOutput(2, "dbOptions: $it")
             }
 
@@ -231,7 +271,7 @@ class Connection {
             } catch (SQLException sqlException) {
                 displayOutput(0, ">>> ERROR: unable to open dbconnection to ${m_dbUrl}:")
                 displayOutput(0.4, sqlException)
-                displayOutput(0.4, "user=${m_dbUser}, word=${m_dbPassword.take(1)}****${m_dbPassword.reverse().take(1).reverse()}")
+                displayOutput(0.4, "user=${m_dbUser}")
                 System.exit(1)
             }
         }
@@ -245,7 +285,7 @@ class Connection {
 
     void flap(frequency) {
         displayOutput(1, "testing connection to ${m_dbUrl}")
-        m_dbOptions.tokenize('?&').each {
+        m_dbOptions?.tokenize('?&')?.each {
             displayOutput(2, "dbOptions: $it")
         }
         List tokens = frequency.split("@")
@@ -272,9 +312,9 @@ class Connection {
 
         // limit each column display to a max of width bytes
         colWidths.eachWithIndex { var width, int columnIndex ->
-            if (m_verbose >= 3) print "column '${columnNames[columnIndex]}' width = $width (width option=$m_width)"
+            if (m_verbose >= 4) print "column '${columnNames[columnIndex]}' width = $width (width option=$m_width)"
             colWidths[columnIndex] = Math.min(width, m_width)
-            if (m_verbose >= 3) println "... set to ${colWidths[columnIndex]}" +
+            if (m_verbose >= 4) println "... set to ${colWidths[columnIndex]}" +
                     ((colTypes[columnIndex] in [-6, -5, 2, 3, 4, 5, 6, 7, 8]) ? " right " : " left ") +
                     "justified (type=${colTypes[columnIndex]})"
         }
@@ -472,7 +512,7 @@ class Connection {
             colTypes = (1..metadata.columnCount).collect { metadata.getColumnType(it) }
         }
 
-        displayOutput(2.4, "executing: $sqlStatement")
+        displayOutput(3, "executing: $sqlStatement")
 
         try {
             m_connection.execute(sqlStatement, metaClosure) { isResultSet, result ->
@@ -532,10 +572,11 @@ class Connection {
 
         new FileReader(m_fileIn).withReader { reader ->
             reader.eachLine { line, lineNumber ->
-                if (m_verbose >= 3) displayOutput(3, sprintf('input line %2d: %s', lineNumber, line))
+                displayOutput(4, sprintf('input line %2d: %s', lineNumber, line))
                 if (line.startsWith(".")) {
-                    displayOutput(3, ">>> line $lineNumber: CONTROL RECORD: $line")
-                    if (m_sqlStatement != "") errorExit("(line $lineNumber) discarding unterminated SQL = $m_sqlStatement")
+                    displayOutput(4, ">>> line $lineNumber: CONTROL RECORD: $line")
+                    if (m_sqlStatement != "")
+                        errorExit("(line $lineNumber) discarding unterminated SQL = $m_sqlStatement")
 
                     processCommandInput(line)
 
@@ -594,7 +635,9 @@ class Connection {
                     break
                 }
             } catch (exception) {
-                if (exception == EndOfFileException) { println "eof"; return }   //FIXME
+                if (exception == EndOfFileException) {
+                    println "eof"; return
+                }   //FIXME
             }
 
             reader.getHistory().add(line)
