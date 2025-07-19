@@ -17,7 +17,7 @@ class GroovySQL {
 
         cliOptions.with {
             a(longOpt: 'append', 'output file append mode')
-            A(longOpt: 'authentication', 'specify secrets vault', args: 1)
+            A(longOpt: 'authentication', 'specify authentication method', args: 1)
             c(longOpt: 'config', 'specify database configuration file', args: 1)
             d(longOpt: 'database', 'specify database name', args: 1)
             f(longOpt: 'filein', 'specify input filename', args: 1)
