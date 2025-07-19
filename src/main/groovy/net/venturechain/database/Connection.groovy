@@ -207,7 +207,7 @@ class Connection {
         }
 
         if (Math.abs(m_verbose) >= 1) {
-            displayOutput(1, "GroovySQL SEMANTIC_VERSION powered by Groovy " +
+            displayOutput(1, "GroovySQL 2.10.0 powered by Groovy " +
                     "${GroovySystem.version}/${Runtime.version()} with ${m_dbDriverVersion}")
         }
 

@@ -13,7 +13,7 @@ class GroovySQL {
     static void main(String[] args) {
 
         var cliOptions = new CliBuilder(usage: "groovysql [options]", posix: true,
-                header: "Groovy SQL Client CLI version SEMANTIC_VERSION (${GroovySystem.version}/${Runtime.version()})\nOptions:")
+                header: "Groovy SQL Client CLI version 2.10.0 (${GroovySystem.version}/${Runtime.version()})\nOptions:")
 
         cliOptions.with {
             a(longOpt: 'append', 'output file append mode')

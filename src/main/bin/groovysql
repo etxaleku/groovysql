@@ -4,7 +4,7 @@
 # since that doesn't seem possible via directly executed jars
 # and also serves as a way to control other options in future
 
-VERSION=SEMANTIC_VERSION
+VERSION=2.10.0
 
 BINDIR=$(dirname $0)
 
