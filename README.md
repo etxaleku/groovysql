@@ -289,8 +289,9 @@ GroovySQL supports various verbose levels as well as a timestamp option for runt
     level 0 - no messages (except data of course)
     level 1 - basic messages (version info, open/close - default)
     level 2 - enhanced messages (adds open/close success, authentication info, query audit)
-    level 3 - debug messages (adds input trace, text format field adjustments)
-    level 4 - debug messages (adds system.properties display)
+    level 3 - debug messages (adds input trace)
+    level 4 - debug messages (adds text format field adjustments)
+    level 5 - debug messages (adds system.properties display)
 
 While level 1 is the default, setting `--verbose=0` allows GroovySQL to be used in pipelines. For example, piping output
 to [xmlstarlet(1)](https://xmlstar.sourceforge.net/doc/UG/xmlstarlet-ug.html)
@@ -320,7 +321,7 @@ will override the default. There is no command line option to set dbClass.
 The dbAuthentication parameter supports various authentication approaches and is formatted as a colon-separated string
 as follows:
 
-     azure:key-vault-name:key
+     azure:key-vault-name:key-secret-name
      gcp:secret-name
      aws:secret-id
      keypair:<private-key-file-name>:<passphrase>     # encrypted private key

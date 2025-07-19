@@ -1,5 +1,11 @@
 package net.venturechain.database
 
+import com.azure.identity.DefaultAzureCredentialBuilder
+import com.azure.security.keyvault.secrets.SecretClient
+import com.azure.security.keyvault.secrets.SecretClientBuilder
+import com.azure.security.keyvault.secrets.models.KeyVaultSecret
+import com.azure.security.keyvault.secrets.models.SecretProperties
+
 import groovy.sql.Sql
 
 import groovy.cli.commons.OptionAccessor
@@ -128,6 +134,8 @@ class Connection {
             m_dbClass = m_dbConfig?.dbClass
         }
 
+        m_dbOptions ?= ""
+
         // command line option overrides config file default
         m_dbUser = options.user ?: m_dbUser
         m_dbPassword = options.password ?: m_dbPassword
@@ -203,15 +211,20 @@ class Connection {
                     "${GroovySystem.version}/${Runtime.version()} with ${m_dbDriverVersion}")
         }
 
+        Map authProperties = [:]
+
         switch (m_authentication) {
             case ~/azure:.*/:
-//                AzureProfile profile = new AzureProfile(AzureEnvironment.AZURE);
-//                TokenCredential credential = new DefaultAzureCredentialBuilder()
-//                        .authorityHost(profile.getEnvironment().getActiveDirectoryEndpoint())
-//                        .build();
-//                KeyVaultManager manager = KeyVaultManager
-//                        .authenticate(credential, profile);
-                displayOutput(2, "azure keyvault authentication")
+                def (_, keyVaultName, keySecretName) = m_authentication.split(':') as List
+                String keyVaultUri = "https://${keyVaultName}.vault.azure.net"
+                SecretClient secretClient = new SecretClientBuilder()
+                        .vaultUrl(keyVaultUri)
+                        .credential(new DefaultAzureCredentialBuilder().build())
+                        .buildClient()
+                KeyVaultSecret keySecret = secretClient.getSecret(keySecretName)
+                authProperties.user = m_dbUser
+                authProperties.password = keySecret.value
+                displayOutput(2, "azure keyvault authentication (keyvault: ${keyVaultName}, secret:${keySecretName})")
                 break
             case ~/gcp:.*/:
                 displayOutput(2, "gcp secrets manager authentication")
@@ -224,28 +237,26 @@ class Connection {
                 if (!new File(keyFile).canRead()) {
                     throw new IllegalArgumentException("unable to read private key file: ${keyFile}")
                 }
-                def props = [user: m_dbUser, private_key_file: keyFile, private_key_security: "unencrypted" ]
+                authProperties.private_key_file = keyFile
                 if (keyPassword) {
-                    props.private_key_pwd = keyPassword
-                    props.private_key_security = "encrypted"
+                    authProperties.private_key_pwd = keyPassword
+                    authProperties.private_key_security = "encrypted"
+                } else {
+                    authProperties.private_key_security = "unencrypted"
                 }
-                m_dbOptions ?= ""
-                m_connectionParameters = [
-                        url       : "${m_dbUrl}${m_dbOptions}",
-                        driver    : m_dbClass,
-                        properties: props as Properties
-                ]
-                displayOutput(2, "keypair authentication with ${props.private_key_security} private_key_file = ${keyFile}")
+                displayOutput(2, "keypair authentication with ${authProperties.private_key_security} private_key_file = ${keyFile}")
                 break
             default:
-                m_dbOptions ?= ""
-                m_connectionParameters = [
-                        url     : "${m_dbUrl}${m_dbOptions}",
-                        user    : m_dbUser,
-                        password: m_dbPassword,
-                        driver  : m_dbClass
-                ]
+                authProperties.user = m_dbUser
+                authProperties.password = m_dbPassword
+                displayOutput(2, "basic authentication")
         }
+
+        m_connectionParameters = [
+                url       : "${m_dbUrl}${m_dbOptions}",
+                driver    : m_dbClass,
+                properties: authProperties as Properties
+        ]
 
         if (!options.testconnect) {
             displayOutput(1, "opening connection to ${m_dbUrl}")
@@ -301,9 +312,9 @@ class Connection {
 
         // limit each column display to a max of width bytes
         colWidths.eachWithIndex { var width, int columnIndex ->
-            if (m_verbose >= 3) print "column '${columnNames[columnIndex]}' width = $width (width option=$m_width)"
+            if (m_verbose >= 4) print "column '${columnNames[columnIndex]}' width = $width (width option=$m_width)"
             colWidths[columnIndex] = Math.min(width, m_width)
-            if (m_verbose >= 3) println "... set to ${colWidths[columnIndex]}" +
+            if (m_verbose >= 4) println "... set to ${colWidths[columnIndex]}" +
                     ((colTypes[columnIndex] in [-6, -5, 2, 3, 4, 5, 6, 7, 8]) ? " right " : " left ") +
                     "justified (type=${colTypes[columnIndex]})"
         }
@@ -501,7 +512,7 @@ class Connection {
             colTypes = (1..metadata.columnCount).collect { metadata.getColumnType(it) }
         }
 
-        displayOutput(2.4, "executing: $sqlStatement")
+        displayOutput(3, "executing: $sqlStatement")
 
         try {
             m_connection.execute(sqlStatement, metaClosure) { isResultSet, result ->
@@ -561,9 +572,9 @@ class Connection {
 
         new FileReader(m_fileIn).withReader { reader ->
             reader.eachLine { line, lineNumber ->
-                if (m_verbose >= 3) displayOutput(3, sprintf('input line %2d: %s', lineNumber, line))
+                displayOutput(4, sprintf('input line %2d: %s', lineNumber, line))
                 if (line.startsWith(".")) {
-                    displayOutput(3, ">>> line $lineNumber: CONTROL RECORD: $line")
+                    displayOutput(4, ">>> line $lineNumber: CONTROL RECORD: $line")
                     if (m_sqlStatement != "")
                         errorExit("(line $lineNumber) discarding unterminated SQL = $m_sqlStatement")
 

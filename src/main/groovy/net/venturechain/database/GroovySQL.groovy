@@ -66,7 +66,7 @@ class GroovySQL {
             }
         }
 
-        if (options.verbose >= 4) {
+        if (options.verbose >= 5) {
             println "System.properties:"
             for (key in System.properties.keySet().sort()) {
                 printf('%-30s   %s\n', key, System.properties[key])
