@@ -321,9 +321,9 @@ will override the default. There is no command line option to set dbClass.
 The dbAuthentication parameter supports various authentication approaches and is formatted as a colon-separated string
 as follows:
 
-     azure:key-vault-name:key-secret-name
-     gcp:secret-name
-     aws:secret-id
+     azure:<key-vault-name>:<secret-name>
+     gcp:<secret-name>
+     aws:<secret-id>
      keypair:<private-key-file-name>:<passphrase>     # encrypted private key
      keypair:<private-key-file-name>                  # unencrypted private key
 
