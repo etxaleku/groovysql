@@ -129,10 +129,10 @@ Specify authentication using various secrets management systems. Default value c
 
 Currently supported authentication stores are:
 
-    Azure KeyVault ................ azure:key-vault-name:key
-    Google Secret Manager ......... gcp:secret-name
-    AWS Secrets Manager ........... aws:secret-id
-    KeyPair ....................... keypair:~/.keys/rsa-key.p8:passphrase
+    Azure KeyVault ................ azure:<key-vault-name>:<secret-name>
+    AWS Secrets Manager ........... aws:<region-name>:<secret-name>
+    Google Secret Manager ......... gcp:<project-id>:<secret-id>
+    KeyPair ....................... keypair:<private-key-file>:<passphrase>
 
 ### `-c|--config <arg>`
 
@@ -288,9 +288,9 @@ GroovySQL supports various verbose levels as well as a timestamp option for runt
 
     level 0 - no messages (except data of course)
     level 1 - basic messages (version info, open/close - default)
-    level 2 - enhanced messages (adds open/close success, authentication info, query audit)
-    level 3 - debug messages (adds input trace)
-    level 4 - debug messages (adds text format field adjustments)
+    level 2 - enhanced messages (adds open/close success, authentication info)
+    level 3 - debug messages (adds query audit, dbOptions)
+    level 4 - debug messages (adds input trace, text format field adjustments)
     level 5 - debug messages (adds system.properties display)
 
 While level 1 is the default, setting `--verbose=0` allows GroovySQL to be used in pipelines. For example, piping output
@@ -322,12 +322,16 @@ The dbAuthentication parameter supports various authentication approaches and is
 as follows:
 
      azure:<key-vault-name>:<secret-name>
-     gcp:<secret-name>
-     aws:<secret-id>
+     aws:<region>:<secret-name>
+     gcp:<project-id>:<secret-id>
      keypair:<private-key-file-name>:<passphrase>     # encrypted private key
      keypair:<private-key-file-name>                  # unencrypted private key
 
-When using simple user/password or authentication passphrases, the use of Config files keeps passwords and passphrases
+A common naming convention for <secret-name/secret-id> is "environment-endpoint-user" where, for GroovySQL, endpoints
+are databases. So for example, "dev-denodo-myuser" would contain the myuser password for the development denodo
+database.
+
+When using user/password or authentication passphrases, the use of Config files keeps passwords and passphrases
 off of system monitors and is recommended.
 
 Config files are TOML formatted and therefore support comments (#) as is customary.

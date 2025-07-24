@@ -1,16 +1,11 @@
 package net.venturechain.database
 
-import com.azure.identity.DefaultAzureCredentialBuilder
-import com.azure.security.keyvault.secrets.SecretClient
-import com.azure.security.keyvault.secrets.SecretClientBuilder
-import com.azure.security.keyvault.secrets.models.KeyVaultSecret
-import com.azure.security.keyvault.secrets.models.SecretProperties
-
 import groovy.sql.Sql
 
 import groovy.cli.commons.OptionAccessor
 
 import groovy.json.JsonBuilder
+import groovy.json.JsonSlurper
 import groovy.toml.TomlSlurper
 import groovy.xml.MarkupBuilder
 
@@ -27,7 +22,23 @@ import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
 import org.jline.widget.AutopairWidgets
 
+import com.azure.identity.DefaultAzureCredentialBuilder
+import com.azure.security.keyvault.secrets.SecretClient
+import com.azure.security.keyvault.secrets.SecretClientBuilder
+import com.azure.security.keyvault.secrets.models.KeyVaultSecret
+
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse
+
+import com.google.cloud.secretmanager.v1.AccessSecretVersionResponse
+import com.google.cloud.secretmanager.v1.SecretManagerServiceClient
+import com.google.cloud.secretmanager.v1.SecretVersionName
+
 import java.sql.SQLException
+import java.util.zip.CRC32C
+import java.util.zip.Checksum
 
 class Connection {
 
@@ -215,27 +226,73 @@ class Connection {
 
         switch (m_authentication) {
             case ~/azure:.*/:
-                def (_, keyVaultName, keySecretName) = m_authentication.split(':') as List
-                String keyVaultUri = "https://${keyVaultName}.vault.azure.net"
-                SecretClient secretClient = new SecretClientBuilder()
-                        .vaultUrl(keyVaultUri)
-                        .credential(new DefaultAzureCredentialBuilder().build())
-                        .buildClient()
-                KeyVaultSecret keySecret = secretClient.getSecret(keySecretName)
-                authProperties.user = m_dbUser
-                authProperties.password = keySecret.value
-                displayOutput(2, "azure keyvault authentication (keyvault: ${keyVaultName}, secret:${keySecretName})")
+                def (_, keyVaultName, secretName) = m_authentication.split(':') as List
+                displayOutput(2, "azure keyvault authentication using secret '${secretName}' in keyvault " +
+                        "'${keyVaultName}'")
+                try {
+                    String keyVaultUri = "https://${keyVaultName}.vault.azure.net"
+                    SecretClient secretClient = new SecretClientBuilder()
+                            .vaultUrl(keyVaultUri)
+                            .credential(new DefaultAzureCredentialBuilder().build())
+                            .buildClient()
+                    KeyVaultSecret keySecret = secretClient.getSecret(secretName)
+                    authProperties.user = m_dbUser
+                    authProperties.password = keySecret.value
+                } catch (ignored) {
+                    displayOutput(0, ">>> ERROR: unable to get azure secret '${secretName}' in keyvault " +
+                            "'${keyVaultName}'")
+                }
                 break
             case ~/gcp:.*/:
-                displayOutput(2, "gcp secrets manager authentication")
+                def (_, projectId, secretId) = m_authentication.split(':') as List
+                displayOutput(2, "gcp secrets authentication with '${secretId}' in project '${projectId}'")
+                try (SecretManagerServiceClient client = SecretManagerServiceClient.create()) {
+                    SecretVersionName secretVersionName = SecretVersionName.of(projectId, secretId, 'latest')
+                    AccessSecretVersionResponse response = client.accessSecretVersion(secretVersionName)
+                    // Verify checksum
+                    byte[] data = response.getPayload().getData().toByteArray();
+                    Checksum checksum = new CRC32C();
+                    checksum.update(data, 0, data.length);
+                    if (response.getPayload().getDataCrc32C() != checksum.getValue()) {
+                        errorExit("Data corruption detected for GCP secret ${secretId}")
+                    }
+                    authProperties.user = m_dbUser
+                    authProperties.password = response.getPayload().getData().toStringUtf8()
+                } catch (ignored) {
+                    displayOutput(0, ">>> ERROR: unable to get gcp secret '${secretId}' in project " +
+                            "'${projectId}'")
+                }
                 break
             case ~/aws:.*/:
-                displayOutput(2, "aws secrets authentication")
+                def (_, regionName, secretName) = m_authentication.split(':') as List
+                displayOutput(2, "aws secrets authentication with '${secretName}' in region '${regionName}'")
+                try {
+                    Region region = Region.of(regionName)
+                    SecretsManagerClient secretsClient = SecretsManagerClient.builder()
+                            .region(region)
+                            .build()
+                    GetSecretValueRequest valueRequest = GetSecretValueRequest.builder()
+                            .secretId(secretName)
+                            .build()
+                    GetSecretValueResponse valueResponse = secretsClient.getSecretValue(valueRequest)
+                    def jsonSlurper = new JsonSlurper()
+                    def secretMap = jsonSlurper.parseText(valueResponse.secretString())
+                    authProperties.user = m_dbUser
+                    authProperties.password = secretMap.password
+                    if (!authProperties.password) {
+                        displayOutput(0, ">>> ERROR: no password found in aws secret '${secretName}' in region " +
+                                "'${regionName}'")
+                    }
+                    secretsClient.close()
+                } catch (ignored) {
+                    displayOutput(0, ">>> ERROR: unable to retrieve aws secret '${secretName}' in region " +
+                            "'${regionName}'")
+                }
                 break
             case ~/keypair:.*/:
                 def (_, keyFile, keyPassword) = m_authentication.split(':') as List
                 if (!new File(keyFile).canRead()) {
-                    throw new IllegalArgumentException("unable to read private key file: ${keyFile}")
+                    errorExit("unable to read private key file: ${keyFile}")
                 }
                 authProperties.private_key_file = keyFile
                 if (keyPassword) {
@@ -244,7 +301,8 @@ class Connection {
                 } else {
                     authProperties.private_key_security = "unencrypted"
                 }
-                displayOutput(2, "keypair authentication with ${authProperties.private_key_security} private_key_file = ${keyFile}")
+                displayOutput(2, "keypair authentication with ${authProperties.private_key_security} " +
+                        "private_key_file = ${keyFile}")
                 break
             default:
                 authProperties.user = m_dbUser
@@ -262,7 +320,7 @@ class Connection {
             displayOutput(1, "opening connection to ${m_dbUrl}")
 
             m_dbOptions?.tokenize('?&')?.each {
-                displayOutput(2, "dbOptions: $it")
+                displayOutput(3, "dbOptions: $it")
             }
 
             try {
