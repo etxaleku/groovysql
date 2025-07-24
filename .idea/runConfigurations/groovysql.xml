@@ -2,7 +2,7 @@
   <configuration default="false" name="groovysql" type="GroovyScriptRunConfiguration" factoryName="Groovy" editBeforeRun="true">
     <setting name="path" value="file://$PROJECT_DIR$/src/main/groovy/net/venturechain/database/GroovySQL.groovy" />
     <setting name="vmparams" value="-Dnet.snowflake.jdbc.enableBouncyCastle=TRUE --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED" />
-    <setting name="params" value="-c cfg-denodo.toml -v2 -f sqltest-1.3x3 -F csv -H -A azure:groovysql-kv:denodo-admin" />
+    <setting name="params" value="-c cfg-denodo.toml -f sqltest-1.customer -F text -v2 -t -o resu -A gcp:teak-formula-335:dev-denodo-admin" />
     <setting name="workDir" value="file://$PROJECT_DIR$/tests" />
     <setting name="debug" value="false" />
     <setting name="alternativeJrePathEnabled" value="true" />
