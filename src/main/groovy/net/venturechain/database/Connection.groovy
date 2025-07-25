@@ -294,6 +294,7 @@ class Connection {
                 if (!new File(keyFile).canRead()) {
                     errorExit("unable to read private key file: ${keyFile}")
                 }
+                authProperties.user = m_dbUser
                 authProperties.private_key_file = keyFile
                 if (keyPassword) {
                     authProperties.private_key_pwd = keyPassword

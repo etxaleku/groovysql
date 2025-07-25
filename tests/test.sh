@@ -125,7 +125,8 @@ do
 done
 shift $(( OPTIND - 1 ))
 
-: ${DBCONFIG:=venture2.config}
+: ${DBCONFIG:="venture1.config"}
+: ${DBENV:="-1"}
 
 case $RUNFORMAT in
 jar7)
@@ -160,7 +161,7 @@ classfiles)
         EXEC="groovy"
         GROOVYSQL=net/venturechain/database/GroovySQL.groovy
         export CLASSPATH
-        CLASSPATH+=:/app/d9/lib/extensions/jdbc-drivers-other/snowflake-3.x/snowflake-jdbc-3.24.2.jar
+        CLASSPATH+=:/app/d9/lib/extensions/jdbc-drivers-other/snowflake-3.x/snowflake-jdbc-3.25.1.jar
         CLASSPATH+=:/app/d9/lib/extensions/jdbc-drivers/vdp-9/denodo-vdp-jdbcdriver.jar
         CLASSPATH+=:/app/denodo/lib/postgresql-42.7.7.jar
         CLASSPATH+=:/app/denodo/lib/mysql-connector-j-9.3.0.jar

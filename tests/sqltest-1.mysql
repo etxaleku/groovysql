@@ -1,1 +1,1 @@
-select * from bv_address;
+select * from address;
