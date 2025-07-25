@@ -27,7 +27,7 @@
 plugins {
     id 'groovy'
     id 'application'
-    id 'com.gradleup.shadow' version '8.3.0'  // want to be able to bundle everything into a single JAR
+    id 'com.gradleup.shadow' version '8.3.8'  // want to be able to bundle everything into a single JAR
 }
 
 group = 'net.venturechain.database'
@@ -49,19 +49,20 @@ dependencies {
     implementation 'org.apache.groovy:groovy-json:4.0.22'
     implementation 'org.apache.groovy:groovy-sql:4.0.22'
     implementation 'org.apache.groovy:groovy-cli-commons:4.0.22'
-    implementation 'com.gradleup.shadow:shadow-gradle-plugin:8.3.0'
-    implementation 'org.apache.commons:commons-csv:1.10.0'
-    implementation 'org.jline:jline:3.26.1'
-    implementation 'org.apache.commons:commons-lang3:3.14.0'
-    implementation 'org.slf4j:slf4j-nop:2.0.16'
+    implementation 'com.gradleup.shadow:shadow-gradle-plugin:8.3.8'
+    implementation 'org.apache.commons:commons-csv:1.14.0'
+    implementation 'org.jline:jline:3.30.4'
+    implementation 'org.apache.commons:commons-lang3:3.18.0'
+    implementation 'org.slf4j:slf4j-nop:2.0.17'
     implementation 'org.postgresql:postgresql:42.7.7'
     implementation 'com.mysql:mysql-connector-j:9.3.0'
-    implementation 'org.xerial:sqlite-jdbc:3.46.0.1'
-    implementation 'org.apache.ivy:ivy:2.5.3'
-    implementation 'com.azure.resourcemanager:azure-resourcemanager-keyvault:2.44.0'
-    implementation 'com.azure:azure-identity:1.16.2'
-    implementation name: 'snowflake-jdbc-3.24.2'
+    implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
+    implementation name: 'snowflake-jdbc-3.25.1'
     implementation name: 'denodo-vdp-jdbcdriver'
+    implementation 'com.azure:azure-identity:1.16.3'
+    implementation 'com.azure.resourcemanager:azure-resourcemanager-keyvault:2.52.0'
+    implementation 'software.amazon.awssdk:secretsmanager:2.32.7'
+    implementation 'com.google.cloud:google-cloud-secretmanager:2.68.0'
 
     // used by gradle (only) to integrate with maven
     implementation libs.guava
