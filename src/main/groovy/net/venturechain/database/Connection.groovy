@@ -218,7 +218,7 @@ class Connection {
         }
 
         if (Math.abs(m_verbose) >= 1) {
-            displayOutput(1, "GroovySQL 3.0.0 powered by Groovy " +
+            displayOutput(1, "GroovySQL 3.0.1 powered by Groovy " +
                     "${GroovySystem.version}/${Runtime.version()} with ${m_dbDriverVersion}")
         }
 
