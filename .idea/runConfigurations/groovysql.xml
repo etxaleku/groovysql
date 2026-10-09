@@ -5,6 +5,7 @@
     <setting name="params" value="-c cfg-denodo.toml -f sqltest-1.customer -F text -v2 -t -o resu -A gcp:teak-formula-335:dev-denodo-admin" />
     <setting name="workDir" value="file://$PROJECT_DIR$/tests" />
     <setting name="debug" value="false" />
+    <setting name="shortenClasspath" value="NONE" />
     <setting name="alternativeJrePathEnabled" value="true" />
     <setting name="alternativeJrePath" value="temurin-17 (3)" />
     <method v="2">

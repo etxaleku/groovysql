@@ -402,21 +402,21 @@ Either of these examples will run the query and send the output to the screen.
 File: txn_audit.sql
 
 ```sql
-    select
-      100                           -- unnamed integer field
-    , 200 as "named field 1"        -- field name longer than field width
-    , audit_dt as "audit date"      -- date/time field with named field with space
-    , audit_reason                  -- standard varchar field
-    , item_id                       -- short varchar field (6)
-    , price                         -- double
+select
+  100                           -- unnamed integer field
+, 200 as "named field 1"        -- field name longer than field width
+, audit_dt as "audit date"      -- date/time field with named field with space
+, audit_reason                  -- standard varchar field
+, item_id                       -- short varchar field (6)
+, price                         -- double
 
-    from
-        txn_audit
-    join
-        txn
-    on
-        txn.txn_id = txn_audit.txn_id
-    ;
+from
+    txn_audit
+join
+    txn
+on
+    txn.txn_id = txn_audit.txn_id
+;
 ```
 
 Executing txn_audit.sql to produce txn_audit.xml in XML format (shown using short options and without `--config` option)
