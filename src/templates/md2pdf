@@ -1,56 +1,344 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-MARKDOWN_FILE=$1
-BLOCKSIZE=normalsize
-TABLESIZE=normalsize
+# # Installation and Setup for md2pdf
+# # Prerequisites: uv and pandoc available on PATH
+# 
+# # Choose the virtual environment location
+# V="$HOME/.local/share/venvs/md2pdf"
+# 
+# # Create the Python virtual environment
+# uv venv "$V"
+# 
+# # Install the Playwright Python package into that environment
+# uv pip install --python "$V/bin/python" playwright
+# 
+# # Install Chromium and its required Linux system dependencies
+# "$V/bin/python" -m playwright install --with-deps chromium
+#
+# # Install pypdf
+# uv pip install --python "$V/bin/python" pypdf
+#
 
-YAML_CFG=$(basename $MARKDOWN_FILE .md).yaml
-PDF_FILE=$(basename $MARKDOWN_FILE .md).pdf
-TEX_FILE=$(basename $MARKDOWN_FILE .md).tex
-TXT_FILE=$(basename $MARKDOWN_FILE .md).txt
 
-case $2 in
-txt)		OUT_FILE=$TXT_FILE ;;
-tex)		OUT_FILE=$TEX_FILE ;;
-'')		OUT_FILE=$PDF_FILE ; DEFAULT=true ;;
-*)		OUT_FILE=$PDF_FILE ; BLOCKSIZE=$2 ; TABLESIZE=${3:-$TABLESIZE} ;;
-esac
+set -euo pipefail
 
-[ ! -f $YAML_CFG ] && YAML_CFG=""
+PYTHON="${MDPDF_PYTHON:-$HOME/.local/share/venvs/md2pdf/bin/python}"
 
-if [ $DEFAULT ]
-then
-	echo "generating $OUT_FILE with default blocksize and tablesize"
-
-	pandoc $YAML_CFG $MARKDOWN_FILE \
-		--standalone \
-		--template eisvogel \
-		--listings \
-		--output $OUT_FILE
-else
-	echo "generating $OUT_FILE with blocksize=$BLOCKSIZE and tablesize=$TABLESIZE"
-
-	pandoc $YAML_CFG $MARKDOWN_FILE \
-		--standalone \
-		--template eisvogel \
-		--listings \
-		--variable code-block-font-size=\\$BLOCKSIZE \
-		--variable header-includes:"\\AtBeginEnvironment{longtable}{\\$TABLESIZE}" \
-		--output $OUT_FILE
+if [[ $# -lt 1 || $# -gt 3 ]]; then
+    echo "Usage: $0 FILE.md [html|txt|CODE_SIZE [TABLE_SIZE]]" >&2
+    exit 2
 fi
 
-exit
+if ! command -v pandoc >/dev/null 2>&1; then
+    echo "Error: pandoc is not installed or not on PATH." >&2
+    exit 1
+fi
 
-# LaTeX font sizes:
-# 
-# Command             10pt    11pt    12pt
-# \tiny               5       6       6
-# \scriptsize         7       8       8
-# \footnotesize       8       9       10
-# \small              9       10      10.95
-# \normalsize         10      10.95   12
-# \large              12      12      14.4
-# \Large              14.4    14.4    17.28
-# \LARGE              17.28   17.28   20.74
-# \huge               20.74   20.74   24.88
-# \Huge               24.88   24.88   24.88
+if [[ ! -x "$PYTHON" ]]; then
+    echo "Error: Python environment not found: $PYTHON" >&2
+    echo "Install the Playwright environment described above." >&2
+    exit 1
+fi
+
+exec "$PYTHON" - "$@" <<'PY'
+import html
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+source = Path(sys.argv[1]).expanduser().resolve()
+mode = sys.argv[2] if len(sys.argv) > 2 else "normalsize"
+table_size = sys.argv[3] if len(sys.argv) > 3 else "normalsize"
+
+sizes = {
+    "tiny": "5pt",
+    "scriptsize": "7pt",
+    "footnotesize": "8pt",
+    "small": "9pt",
+    "normalsize": "10pt",
+    "large": "12pt",
+    "Large": "14pt",
+    "LARGE": "17pt",
+    "huge": "20pt",
+    "Huge": "25pt",
+}
+
+if not source.is_file():
+    sys.exit(f"Error: input file not found: {source}")
+
+if mode in {"html", "txt"}:
+    if len(sys.argv) > 3:
+        sys.exit("Error: html/txt mode does not accept a table size.")
+    output_mode = mode
+    code_size = "normalsize"
+else:
+    output_mode = "pdf"
+    code_size = mode
+    for label, value in [("code", code_size), ("table", table_size)]:
+        if value not in sizes:
+            sys.exit(
+                f"Error: unknown {label} size {value!r}. "
+                f"Choose from: {', '.join(sizes)}"
+            )
+
+output = source.with_suffix("." + output_mode)
+
+if output_mode == "txt":
+    subprocess.run(
+        ["pandoc", source.name, "--to=plain", "--output", str(output)],
+        cwd=source.parent,
+        check=True,
+    )
+    print(f"Generated {output}")
+    sys.exit(0)
+
+css = r"""
+@page {
+    size: Letter;
+    margin: 0.55in;
+}
+
+html {
+    background: white;
+    color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    max-width: none;
+    font-family: Arial, "Liberation Sans", sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+}
+
+p {
+    margin: 0 0 12pt;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    line-height: 1.25;
+    margin: 18pt 0 9pt;
+    break-after: avoid;
+}
+
+h1 { font-size: 22pt; }
+h2 { font-size: 17pt; }
+h3 { font-size: 13pt; }
+
+a {
+    color: #245caa;
+    text-decoration: none;
+}
+
+table {
+    width: auto;
+    max-width: calc(100% - 12pt);
+    border-collapse: collapse;
+    margin: 12pt 0;
+    margin-left: 12pt;
+    font-size: __TABLE_SIZE__;
+    line-height: 1.4;
+}
+
+th, td {
+    border: 1px solid #e3e5e7;
+    padding: 6pt 9pt;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+th {
+    font-weight: bold;
+    text-align: center;
+    background: white;
+}
+
+td {
+    text-align: left;
+}
+
+thead {
+    display: table-header-group;
+}
+
+tr {
+    break-inside: avoid;
+}
+
+code {
+    font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+    font-size: 0.9em;
+    background: #f3f6f8;
+    padding: 1pt 3pt;
+    border-radius: 2pt;
+}
+
+pre {
+    margin: 12pt 0;
+    padding: 12pt;
+    background: #f3f6f8;
+    border-radius: 2pt;
+    font-size: __CODE_SIZE__;
+    line-height: 1.20;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+pre code {
+    font-size: inherit;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    white-space: inherit;
+}
+
+div.sourceCode {
+    background: #f3f6f8;
+    overflow: visible;
+}
+
+pre.sourceCode {
+    overflow: visible;
+}
+
+blockquote {
+    margin: 12pt 0;
+    padding-left: 12pt;
+    border-left: 3pt solid #ddd;
+    color: #555;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid #e3e5e7;
+    margin: 16pt 0;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+ul, ol {
+    padding-left: 20pt;
+}
+"""
+css = css.replace("__CODE_SIZE__", sizes[code_size])
+css = css.replace("__TABLE_SIZE__", sizes[table_size])
+
+import re
+
+FONT_SCALE = 0.85
+
+css = re.sub(
+    r"(font-size:\s*)([0-9.]+)pt",
+    lambda match: (
+        f"{match.group(1)}"
+        f"{float(match.group(2)) * FONT_SCALE:g}pt"
+    ),
+    css,
+)
+
+try:
+    with tempfile.TemporaryDirectory(prefix="md2pdf-") as temporary:
+        temporary = Path(temporary)
+        header = temporary / "style.html"
+        document = temporary / "document.html"
+
+        header.write_text(
+            "<style>\n" + css + "\n</style>\n",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                "pandoc",
+                source.name,
+                "--from=markdown",
+                "--to=html5",
+                "--standalone",
+                "--self-contained",
+                "--highlight-style=pygments",
+                "--metadata", f"pagetitle={source.stem}",
+                "--include-in-header", str(header),
+                "--output", str(document),
+            ],
+            cwd=source.parent,
+            check=True,
+        )
+
+        if output_mode == "html":
+            output.write_bytes(document.read_bytes())
+        else:
+            try:
+                from playwright.sync_api import sync_playwright
+            except ImportError:
+                sys.exit(
+                    "Error: Playwright is not installed in this "
+                    "Python environment."
+                )
+
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch()
+                try:
+                    page = browser.new_page()
+                    page.goto(document.as_uri(), wait_until="load")
+                    page.evaluate("document.fonts.ready")
+                    page.evaluate("""
+                        async () => {
+                            await Promise.all(
+                                Array.from(document.images).map(img => {
+                                    if (img.complete) return;
+                                    return new Promise(resolve => {
+                                        img.onload = resolve;
+                                        img.onerror = resolve;
+                                    });
+                                })
+                            );
+                        }
+                    """)
+
+                    broken_images = page.evaluate("""
+                        () => Array.from(document.images)
+                            .filter(img => !img.naturalWidth)
+                            .map(img => img.src)
+                    """)
+                    if broken_images:
+                        raise RuntimeError(
+                            "Images failed to load: "
+                            + ", ".join(broken_images)
+                        )
+
+                    fd, temporary_pdf = tempfile.mkstemp(
+                        prefix=".md2pdf-",
+                        suffix=".pdf",
+                        dir=source.parent,
+                    )
+                    os.close(fd)
+                    try:
+                        page.pdf(
+                            path=temporary_pdf,
+                            print_background=True,
+                            prefer_css_page_size=True,
+                            display_header_footer=False,
+                        )
+                        if Path(temporary_pdf).stat().st_size == 0:
+                            raise RuntimeError("Generated PDF is empty.")
+                        os.replace(temporary_pdf, output)
+                    finally:
+                        Path(temporary_pdf).unlink(missing_ok=True)
+                finally:
+                    browser.close()
+
+    print(f"Generated {output}")
+
+except subprocess.CalledProcessError as error:
+    sys.exit(f"Error: Pandoc exited with status {error.returncode}.")
+except Exception as error:
+    sys.exit(f"Error: {error}")
+PY
