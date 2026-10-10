@@ -7,8 +7,10 @@ TABLESIZE=normalsize
 YAML_CFG=$(basename $MARKDOWN_FILE .md).yaml
 PDF_FILE=$(basename $MARKDOWN_FILE .md).pdf
 TEX_FILE=$(basename $MARKDOWN_FILE .md).tex
+TXT_FILE=$(basename $MARKDOWN_FILE .md).txt
 
 case $2 in
+txt)		OUT_FILE=$TXT_FILE ;;
 tex)		OUT_FILE=$TEX_FILE ;;
 '')		OUT_FILE=$PDF_FILE ; DEFAULT=true ;;
 *)		OUT_FILE=$PDF_FILE ; BLOCKSIZE=$2 ; TABLESIZE=${3:-$TABLESIZE} ;;
