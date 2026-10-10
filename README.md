@@ -1,3 +1,15 @@
+---
+title: "GroovySQL"
+author: "Version 3.0.1"
+date: "Oct 2024"
+subject: "SQL Client"
+keywords: [ Groovy SQL ]
+lang: "en"
+table-use-row-colors: true
+geometry: margin=1in
+linkcolor: blue
+...
+
 # GroovySQL - Groovy SQL Client
 
 GroovySQL is a database client designed primarily for batch SQL submission. It is written in Groovy, which compiles to

@@ -1,56 +1,859 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-MARKDOWN_FILE=$1
-BLOCKSIZE=normalsize
-TABLESIZE=normalsize
+# Installation and Setup for md2pdf
+# Prerequisites: uv and pandoc available on PATH
+#
+# V="$HOME/.local/share/venvs/md2pdf"
+# uv venv "$V"
+# uv pip install --python "$V/bin/python" playwright pypdf
+# "$V/bin/python" -m playwright install --with-deps chromium
 
-YAML_CFG=$(basename $MARKDOWN_FILE .md).yaml
-PDF_FILE=$(basename $MARKDOWN_FILE .md).pdf
-TEX_FILE=$(basename $MARKDOWN_FILE .md).tex
-TXT_FILE=$(basename $MARKDOWN_FILE .md).txt
+set -euo pipefail
 
-case $2 in
-txt)		OUT_FILE=$TXT_FILE ;;
-tex)		OUT_FILE=$TEX_FILE ;;
-'')		OUT_FILE=$PDF_FILE ; DEFAULT=true ;;
-*)		OUT_FILE=$PDF_FILE ; BLOCKSIZE=$2 ; TABLESIZE=${3:-$TABLESIZE} ;;
-esac
+PYTHON="${MD2PDF_PYTHON:-$HOME/.local/share/venvs/md2pdf/bin/python}"
 
-[ ! -f $YAML_CFG ] && YAML_CFG=""
-
-if [ $DEFAULT ]
-then
-	echo "generating $OUT_FILE with default blocksize and tablesize"
-
-	pandoc $YAML_CFG $MARKDOWN_FILE \
-		--standalone \
-		--template eisvogel \
-		--listings \
-		--output $OUT_FILE
-else
-	echo "generating $OUT_FILE with blocksize=$BLOCKSIZE and tablesize=$TABLESIZE"
-
-	pandoc $YAML_CFG $MARKDOWN_FILE \
-		--standalone \
-		--template eisvogel \
-		--listings \
-		--variable code-block-font-size=\\$BLOCKSIZE \
-		--variable header-includes:"\\AtBeginEnvironment{longtable}{\\$TABLESIZE}" \
-		--output $OUT_FILE
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 [-C CODE_SIZE] [-B BODY_SIZE] [-T TABLE_SIZE] [-f pdf|html|txt] [-o OUTPUT] FILE..." >&2
+    exit 2
 fi
 
-exit
+if ! command -v pandoc >/dev/null 2>&1; then
+    echo "Error: pandoc is not installed or not on PATH." >&2
+    exit 1
+fi
 
-# LaTeX font sizes:
-# 
-# Command             10pt    11pt    12pt
-# \tiny               5       6       6
-# \scriptsize         7       8       8
-# \footnotesize       8       9       10
-# \small              9       10      10.95
-# \normalsize         10      10.95   12
-# \large              12      12      14.4
-# \Large              14.4    14.4    17.28
-# \LARGE              17.28   17.28   20.74
-# \huge               20.74   20.74   24.88
-# \Huge               24.88   24.88   24.88
+if [[ ! -x "$PYTHON" ]]; then
+    echo "Error: Python environment not found: $PYTHON" >&2
+    echo "Install the environment described above." >&2
+    exit 1
+fi
+
+exec "$PYTHON" - "$@" <<'PY'
+import getopt
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+sizes = {
+    "tiny": "5pt",
+    "scriptsize": "7pt",
+    "footnotesize": "8pt",
+    "small": "9pt",
+    "normalsize": "10pt",
+    "large": "12pt",
+    "Large": "14pt",
+    "LARGE": "17pt",
+    "huge": "20pt",
+    "Huge": "25pt",
+}
+
+
+usage = (
+    "Usage: md2pdf [OPTIONS] FILE...\n"
+    "\n"
+    "Inputs:\n"
+    "  Markdown files and optional .yaml/.yml metadata files.\n"
+    "\n"
+    "Options:\n"
+    "  -C SIZE   Code-block font size (default: normalsize)\n"
+    "  -B SIZE   Body font size       (default: normalsize)\n"
+    "  -T SIZE   Table font size      (default: normalsize)\n"
+    "  -f MODE   Output format: pdf, html, or txt (default: pdf)\n"
+    "  -o FILE   Output filename\n"
+    "  -h        Show this help\n"
+    "\n"
+    "Sizes:\n"
+    f"  {', '.join(sizes)}\n"
+    "\n"
+    "Place options before input files. Use -- to end option parsing."
+)
+
+
+def fail(message):
+    sys.exit(f"Error: {message}")
+
+
+def parse_arguments(arguments):
+    try:
+        options, filenames = getopt.getopt(
+            arguments,
+            "hC:B:T:f:o:",
+            [
+                "help",
+                "code-size=",
+                "body-size=",
+                "table-size=",
+                "format=",
+                "output=",
+            ],
+        )
+    except getopt.GetoptError as error:
+        fail(f"{error}\n\n{usage}")
+
+    output_mode = "pdf"
+    output_arg = None
+
+    selected_sizes = {
+        "code": "normalsize",
+        "body": "normalsize",
+        "table": "normalsize",
+    }
+    explicit_sizes = set()
+
+    size_options = {
+        "-C": "code",
+        "--code-size": "code",
+        "-B": "body",
+        "--body-size": "body",
+        "-T": "table",
+        "--table-size": "table",
+    }
+
+    for option, value in options:
+        if option in {"-h", "--help"}:
+            print(usage)
+            sys.exit(0)
+
+        elif option in size_options:
+            label = size_options[option]
+            if value not in sizes:
+                fail(
+                    f"unknown {label} size {value!r}. "
+                    f"Choose from: {', '.join(sizes)}"
+                )
+            selected_sizes[label] = value
+            explicit_sizes.add(label)
+
+        elif option in {"-f", "--format"}:
+            if value not in {"pdf", "html", "txt"}:
+                fail(
+                    f"unknown output format {value!r}. "
+                    "Choose from: pdf, html, txt."
+                )
+            output_mode = value
+
+        elif option in {"-o", "--output"}:
+            if output_arg is not None:
+                fail("output was specified more than once.")
+            if not value:
+                fail("output filename cannot be empty.")
+            output_arg = value
+
+    if not filenames:
+        fail(f"no input files supplied.\n\n{usage}")
+
+    if output_mode == "txt" and explicit_sizes:
+        fail("font-size options do not apply to txt output.")
+
+    inputs = []
+    for name in filenames:
+        path = Path(name).expanduser().resolve()
+        if not path.is_file():
+            fail(f"input file not found: {path}")
+        inputs.append(path)
+
+    markdown_files = [
+        path for path in inputs
+        if path.suffix.lower() not in {".yaml", ".yml"}
+    ]
+    metadata_files = [
+        path for path in inputs
+        if path.suffix.lower() in {".yaml", ".yml"}
+    ]
+
+    if not markdown_files:
+        fail("at least one Markdown input file is required.")
+
+    if output_arg is None:
+        output = markdown_files[0].with_suffix("." + output_mode)
+    else:
+        output = Path(output_arg).expanduser().resolve()
+
+    if output in inputs:
+        fail("output must not overwrite an input file.")
+    if not output.parent.is_dir():
+        fail(f"output directory does not exist: {output.parent}")
+
+    return (
+        markdown_files,
+        metadata_files,
+        output,
+        output_mode,
+        selected_sizes["code"],
+        selected_sizes["table"],
+        selected_sizes["body"],
+    )
+
+
+def ast_text(value):
+    """Extract readable text from Pandoc metadata nodes."""
+    if isinstance(value, list):
+        return "".join(ast_text(item) for item in value)
+    if not isinstance(value, dict):
+        return str(value)
+
+    kind = value.get("t")
+    content = value.get("c")
+
+    if kind in {"Str", "MetaString"}:
+        return content
+    if kind in {"Space", "SoftBreak", "LineBreak"}:
+        return " "
+    if kind in {"Code", "Math", "RawInline", "RawBlock"}:
+        return content[-1]
+    if kind in {"Link", "Image", "Span", "Div"}:
+        return ast_text(content[1])
+    if kind == "Header":
+        return ast_text(content[2])
+    if kind == "Quoted":
+        return ast_text(content[1])
+    if kind == "Note":
+        return ""
+    if kind in {"Para", "Plain"}:
+        return ast_text(content) + "\n"
+    if content is None:
+        return ""
+    return ast_text(content)
+
+
+def metadata_value(node):
+    kind = node.get("t")
+    content = node.get("c")
+
+    if kind == "MetaBool":
+        return content
+    if kind == "MetaList":
+        return [metadata_value(item) for item in content]
+    if kind == "MetaMap":
+        return {key: metadata_value(value) for key, value in content.items()}
+    return ast_text(node).strip()
+
+
+def text_value(value, separator="; "):
+    if isinstance(value, list):
+        return separator.join(text_value(item, separator) for item in value)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def boolean_value(value, key):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1"}:
+            return True
+        if normalized in {"false", "no", "0"}:
+            return False
+    raise ValueError(f"{key} must be true or false.")
+
+
+def geometry_css(value):
+    if value is None:
+        return ""
+
+    entries = value if isinstance(value, list) else [value]
+    declarations = []
+
+    names = {
+        "margin": "margin",
+        "top": "margin-top",
+        "bottom": "margin-bottom",
+        "left": "margin-left",
+        "right": "margin-right",
+    }
+
+    for entry in entries:
+        for setting in str(entry).split(","):
+            setting = setting.strip()
+            if not setting:
+                continue
+
+            key, separator, length = setting.partition("=")
+            key = key.strip()
+            length = length.strip()
+
+            if not separator or key not in names:
+                raise ValueError(
+                    f"unsupported geometry setting {setting!r}; "
+                    "supported keys: margin, top, bottom, left, right."
+                )
+
+            if not re.fullmatch(
+                r"(?:\d+(?:\.\d+)?|\.\d+)(?:in|cm|mm|pt|px)|0",
+                length,
+            ):
+                raise ValueError(
+                    f"invalid geometry length {length!r}; "
+                    "use a nonnegative value with in, cm, mm, pt, or px."
+                )
+
+            declarations.append(f"{names[key]}: {length};")
+
+    return "@page {\n    " + "\n    ".join(declarations) + "\n}\n"
+
+
+def pdf_header_footer(metadata):
+    # Match the document's default margins and supported geometry overrides.
+    margins = {
+        "top": 0.55 * 96,
+        "bottom": 0.55 * 96,
+        "left": 0.55 * 96,
+        "right": 0.55 * 96,
+    }
+
+    geometry = metadata.get("geometry")
+    if geometry is not None:
+        entries = geometry if isinstance(geometry, list) else [geometry]
+        units = {
+            "in": 96,
+            "cm": 96 / 2.54,
+            "mm": 96 / 25.4,
+            "pt": 96 / 72,
+            "px": 1,
+        }
+
+        for entry in entries:
+            for setting in str(entry).split(","):
+                setting = setting.strip()
+                if not setting:
+                    continue
+
+                key, _, length = setting.partition("=")
+                key = key.strip()
+                length = length.strip()
+
+                if length == "0":
+                    pixels = 0.0
+                else:
+                    match = re.fullmatch(
+                        r"(\d+(?:\.\d+)?|\.\d+)(in|cm|mm|pt|px)",
+                        length,
+                    )
+                    if not match:
+                        raise ValueError(
+                            f"invalid geometry length {length!r}."
+                        )
+                    pixels = float(match.group(1)) * units[match.group(2)]
+
+                if key == "margin":
+                    margins = dict.fromkeys(margins, pixels)
+                elif key in margins:
+                    margins[key] = pixels
+                else:
+                    raise ValueError(
+                        f"unsupported geometry setting {setting!r}."
+                    )
+
+    # Very small margins cannot accommodate these repeating decorations.
+    if margins["top"] < 48 or margins["bottom"] < 48:
+        raise ValueError(
+            "Repeating PDF headers/footers require top and bottom "
+            "margins of at least 0.5in."
+        )
+
+    title = html.escape(text_value(
+        metadata.get("title") or metadata.get("pagetitle") or ""
+    ))
+    date = html.escape(text_value(metadata.get("date")))
+    author = html.escape(text_value(metadata.get("author")))
+
+    left = margins["left"]
+    right = margins["right"]
+
+    # Chromium provides approximately 20px of outer header/footer spacing.
+    # Position the rules within the margins, leaving a gap before the body.
+    header_padding = max(0, margins["top"] - 20 - 36)
+    footer_padding = max(0, margins["bottom"] - 20 - 36)
+
+    common_style = (
+        "width:100%;"
+        "box-sizing:border-box;"
+        f"padding-left:{left:g}px;"
+        f"padding-right:{right:g}px;"
+        "font-family:Arial,'Liberation Sans',sans-serif;"
+        "font-size:10pt;"
+        "line-height:1.25;"
+        "color:#111;"
+    )
+
+    header_template = f"""
+<div style="{common_style}padding-top:{header_padding:g}px;">
+    <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:baseline;
+        gap:12pt;
+        border-bottom:0.75pt solid #333;
+        padding-bottom:3pt;
+    ">
+        <span>{title}</span>
+        <span style="white-space:nowrap;">{date}</span>
+    </div>
+</div>
+"""
+
+    footer_template = f"""
+<div style="{common_style}padding-bottom:{footer_padding:g}px;">
+    <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:baseline;
+        gap:12pt;
+        border-top:0.75pt solid #333;
+        padding-top:3pt;
+    ">
+        <span>{author}</span>
+        <span class="pageNumber"></span>
+    </div>
+</div>
+"""
+
+    return header_template, footer_template
+
+
+def write_atomic(output, content):
+    fd, name = tempfile.mkstemp(
+        prefix=".md2pdf-",
+        suffix=output.suffix,
+        dir=output.parent,
+    )
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+        os.replace(name, output)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+css = r"""
+@page {
+    size: Letter;
+    margin: 0.55in;
+}
+
+html {
+    background: white;
+    color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    max-width: none;
+    font-family: Arial, "Liberation Sans", sans-serif;
+    font-size: __BODY_SIZE__;
+    line-height: 1.5;
+}
+
+p {
+    margin: 0 0 12pt;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    line-height: 1.25;
+    margin: 18pt 0 9pt;
+    break-after: avoid;
+}
+
+h1 { font-size: 22pt; }
+h2 { font-size: 17pt; }
+h3 { font-size: 13pt; }
+
+a {
+    color: #245caa;
+    text-decoration: none;
+}
+
+table {
+    width: auto;
+    max-width: calc(100% - 12pt);
+    border-collapse: collapse;
+    margin: 12pt 0;
+    margin-left: 12pt;
+    font-size: __TABLE_SIZE__;
+    line-height: 1.4;
+}
+
+th, td {
+    border: 1px solid #e3e5e7;
+    padding: 6pt 9pt;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+th {
+    font-weight: bold;
+    text-align: center;
+    background: white;
+}
+
+td {
+    text-align: left;
+}
+
+thead {
+    display: table-header-group;
+}
+
+tr {
+    break-inside: avoid;
+}
+
+code {
+    font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+    font-size: 0.9em;
+    background: #f3f6f8;
+    padding: 1pt 3pt;
+    border-radius: 2pt;
+}
+
+pre {
+    margin: 12pt 0;
+    padding: 12pt;
+    background: #f3f6f8;
+    border-radius: 2pt;
+    font-size: __CODE_SIZE__;
+    line-height: 1.20;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+pre code {
+    font-size: inherit;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    white-space: inherit;
+}
+
+div.sourceCode {
+    background: #f3f6f8;
+    overflow: visible;
+}
+
+pre.sourceCode {
+    overflow: visible;
+}
+
+blockquote {
+    margin: 12pt 0;
+    padding-left: 12pt;
+    border-left: 3pt solid #ddd;
+    color: #555;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid #e3e5e7;
+    margin: 16pt 0;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+ul, ol {
+    padding-left: 20pt;
+}
+"""
+
+
+try:
+    (
+        markdown_files,
+        metadata_files,
+        output,
+        output_mode,
+        code_size,
+        table_size,
+        body_size,
+    ) = parse_arguments(sys.argv[1:])
+
+    working_directory = markdown_files[0].parent
+
+    resource_directories = list(dict.fromkeys(
+        path.parent for path in markdown_files
+    ))
+
+    pandoc_input = [
+        "pandoc",
+        *[str(path) for path in markdown_files],
+        "--from=markdown",
+        "--resource-path",
+        os.pathsep.join(str(path) for path in resource_directories),
+    ]
+
+    for path in metadata_files:
+        pandoc_input.extend(["--metadata-file", str(path)])
+
+    if output_mode == "txt":
+        result = subprocess.run(
+            [*pandoc_input, "--to=plain"],
+            cwd=working_directory,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+        write_atomic(output, result.stdout)
+        print(f"Generated {output}")
+        sys.exit(0)
+
+    # Read effective metadata using the same Pandoc inputs as rendering.
+    result = subprocess.run(
+        [*pandoc_input, "--to=json"],
+        cwd=working_directory,
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    ast = json.loads(result.stdout)
+    metadata = {
+        key: metadata_value(value)
+        for key, value in ast.get("meta", {}).items()
+    }
+
+    css = css.replace("__CODE_SIZE__", sizes[code_size])
+    css = css.replace("__TABLE_SIZE__", sizes[table_size])
+    css = css.replace("__BODY_SIZE__", sizes[body_size])
+
+    FONT_SCALE = 0.85
+    css = re.sub(
+        r"(font-size:\s*)([0-9.]+)pt",
+        lambda match: (
+            f"{match.group(1)}"
+            f"{float(match.group(2)) * FONT_SCALE:g}pt"
+        ),
+        css,
+    )
+
+    css += """
+/* Render Pandoc's metadata title block as a compact document header. */
+header#title-block-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: 12pt;
+    margin: 0 0 16pt;
+    padding: 0 0 3pt;
+    border-bottom: 0.75pt solid #333;
+}
+
+header#title-block-header h1.title {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    font-size: 10pt;
+    font-weight: normal;
+    line-height: 1.25;
+}
+
+header#title-block-header p.date {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+    font-size: 10pt;
+    line-height: 1.25;
+    text-align: right;
+}
+
+header#title-block-header .author,
+header#title-block-header .subtitle {
+    display: none;
+}
+"""
+
+    css += "\n" + geometry_css(metadata.get("geometry"))
+
+    link_color = metadata.get("linkcolor")
+    if link_color is not None:
+        link_color = text_value(link_color).strip()
+        if not re.fullmatch(
+            r"[A-Za-z]+|#[0-9A-Fa-f]{3}|#[0-9A-Fa-f]{6}",
+            link_color,
+        ):
+            raise ValueError(
+                "linkcolor must be a CSS color name or #RGB/#RRGGBB."
+            )
+        css += f"\na {{ color: {link_color}; }}\n"
+
+    if "table-use-row-colors" in metadata:
+        if boolean_value(
+            metadata["table-use-row-colors"],
+            "table-use-row-colors",
+        ):
+            css += """
+tbody tr:nth-child(even) td {
+    background: #f3f6f8;
+}
+"""
+
+    with tempfile.TemporaryDirectory(prefix="md2pdf-") as temporary:
+        temporary = Path(temporary)
+        header = temporary / "style.html"
+        document = temporary / "document.html"
+
+        header.write_text(
+            "<style>\n" + css + "\n</style>\n",
+            encoding="utf-8",
+        )
+
+        render_command = [
+            *pandoc_input,
+            "--to=html5",
+            "--standalone",
+            "--self-contained",
+            "--highlight-style=pygments",
+            "--include-in-header", str(header),
+            "--output", str(document),
+        ]
+
+        if not metadata.get("title") and not metadata.get("pagetitle"):
+            render_command.extend([
+                "--metadata",
+                f"pagetitle={markdown_files[0].stem}",
+            ])
+
+        subprocess.run(
+            render_command,
+            cwd=working_directory,
+            check=True,
+        )
+
+        if output_mode == "html":
+            write_atomic(output, document.read_bytes())
+        else:
+            try:
+                from playwright.sync_api import sync_playwright
+            except ImportError:
+                fail("Playwright is not installed in this Python environment.")
+
+            try:
+                from pypdf import PdfWriter
+            except ImportError:
+                fail(
+                    "pypdf is not installed in this Python environment. "
+                    "Install it with: uv pip install --python "
+                    f"{sys.executable} pypdf"
+                )
+
+            raw_pdf = temporary / "rendered.pdf"
+            final_pdf = temporary / "final.pdf"
+
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch()
+                try:
+                    page = browser.new_page()
+                    page.goto(document.as_uri(), wait_until="load")
+                    page.evaluate("document.fonts.ready")
+                    page.evaluate("""
+                        async () => {
+                            await Promise.all(
+                                Array.from(document.images).map(img => {
+                                    if (img.complete) return;
+                                    return new Promise(resolve => {
+                                        img.onload = resolve;
+                                        img.onerror = resolve;
+                                    });
+                                })
+                            );
+                        }
+                    """)
+
+                    broken_images = page.evaluate("""
+                        () => Array.from(document.images)
+                            .filter(img => !img.naturalWidth)
+                            .map(img => img.src)
+                    """)
+                    if broken_images:
+                        raise RuntimeError(
+                            "Images failed to load: "
+                            + ", ".join(broken_images)
+                        )
+
+                    if link_color is not None:
+                        valid_color = page.evaluate(
+                            "color => CSS.supports('color', color)",
+                            link_color,
+                        )
+                        if not valid_color:
+                            raise ValueError(
+                                f"invalid CSS linkcolor {link_color!r}."
+                            )
+
+                    use_header_footer = any(
+                        text_value(metadata.get(key)).strip()
+                        for key in ("title", "pagetitle", "date", "author")
+                    )
+
+                    pdf_options = {
+                        "path": str(raw_pdf),
+                        "print_background": True,
+                        "prefer_css_page_size": True,
+                        "display_header_footer": use_header_footer,
+                    }
+
+                    if use_header_footer:
+                        # Metadata is shown in the repeating decorations,
+                        # so remove the separate title block from the body.
+                        page.evaluate("""
+                            () => {
+                                const titleBlock = document.querySelector(
+                                    'header#title-block-header'
+                                );
+                                if (titleBlock) titleBlock.remove();
+                            }
+                        """)
+
+                        header_template, footer_template = pdf_header_footer(metadata)
+                        pdf_options["header_template"] = header_template
+                        pdf_options["footer_template"] = footer_template
+
+                    page.pdf(**pdf_options)
+
+                finally:
+                    browser.close()
+
+            if raw_pdf.stat().st_size == 0:
+                raise RuntimeError("Generated PDF is empty.")
+
+            pdf_metadata = {
+                "/Title": text_value(
+                    metadata.get("title")
+                    or metadata.get("pagetitle")
+                    or markdown_files[0].stem
+                )
+            }
+
+            for key, pdf_key in [
+                ("author", "/Author"),
+                ("subject", "/Subject"),
+                ("keywords", "/Keywords"),
+            ]:
+                if key in metadata:
+                    pdf_metadata[pdf_key] = text_value(metadata[key])
+
+            writer = PdfWriter(clone_from=str(raw_pdf))
+            writer.add_metadata(pdf_metadata)
+            writer.write(str(final_pdf))
+
+            if final_pdf.stat().st_size == 0:
+                raise RuntimeError("Final PDF is empty.")
+
+            write_atomic(output, final_pdf.read_bytes())
+
+    print(f"Generated {output}")
+
+except subprocess.CalledProcessError as error:
+    fail(f"Pandoc exited with status {error.returncode}.")
+except Exception as error:
+    fail(str(error))
+PY
