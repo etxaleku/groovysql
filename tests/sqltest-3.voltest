@@ -1,0 +1,59 @@
+-- Generate integers 1 through 1,000,000
+-- SELECT generate_series(1, 1000000);
+
+-- Generate dates for all of 2025
+-- SELECT generate_series('2025-01-01'::date, '2025-12-31'::date, '1 day');
+
+-- Seed table
+DROP TABLE seed_table;
+CREATE TABLE seed_table (
+  id   SERIAL PRIMARY KEY,
+  entry_date DATE,
+  started_at TIME,
+  ended_at   TIME
+);
+
+-- Data table
+DROP TABLE data_table;
+CREATE TABLE data_table (
+  id        INTEGER,
+  full_ts   TIMESTAMP,
+  field_1   VARCHAR(50),
+  field_2   VARCHAR(50),
+  field_3   VARCHAR(50),
+  metric_value   NUMERIC
+);
+
+
+INSERT INTO seed_table (entry_date, started_at, ended_at)
+SELECT d::date,
+       TIME '08:00',
+       TIME '08:05'
+FROM generate_series(
+       DATE '2024-01-01',
+       DATE '2024-01-05',
+       INTERVAL '1 day'
+     ) AS g(d);
+
+-- Using each seed row, expand into minute-based log entries with random data
+--
+-- generate_series(start, end, interval '1 minute') expands each row into every minute between started_at and ended_at.
+-- md5(random()::text) produces a pseudo-unique string per row (like a fake session ID).
+-- round((random() * 100)::numeric, 2) gives you a synthetic metric value between 0 and 100.
+
+INSERT INTO data_table (id,full_ts,field_1,field_2,field_3,metric_value)
+SELECT s.id,
+       g.minute AS full_ts,
+       md5(random()::text) AS field_1,
+       md5(random()::text) AS field_2,
+       md5(random()::text) AS field_3,
+       round((random() * 100)::numeric, 2) AS metric_value
+FROM seed_table s
+JOIN LATERAL generate_series(
+       s.entry_date + s.started_at,
+       s.entry_date + s.ended_at,
+       interval '1 minute'
+     ) AS g(minute)
+ON TRUE;
+
+SELECT * from data_table;

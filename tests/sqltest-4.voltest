@@ -1,0 +1,21 @@
+-- generate 1000 rows of integers
+
+WITH RECURSIVE seq AS (
+  SELECT 1 AS n
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n < 1000
+)
+SELECT n
+FROM seq;
+
+-- with 100 row seed_table
+-- 100 rows X 1000 sequence = 100,000 rows
+
+-- WITH RECURSIVE seq AS (
+--   SELECT 1 AS n
+--   UNION ALL
+--   SELECT n + 1 FROM seq WHERE n < 1000
+-- )
+-- SELECT s.*, seq.n
+-- FROM seed_table s
+-- JOIN seq ON 1=1;

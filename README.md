@@ -224,8 +224,9 @@ Timestamp all output messages, resultSets are excluded (of course). Default valu
 
 ### `-T|--testconnect <arg>`
 
-Run a connection test, arg is `N@W`. Diagnostic scenarios can benefit from adding the `--timestamp` option. See
-[Test Connection Capability](#test-connection-capability).
+Run a connection test, arg is `N@W` where N is the number of iterations and W is the interval in seconds.
+Diagnostic scenarios can benefit from adding the `--timestamp` option.
+See [Test Connection Capability](#test-connection-capability).
 
 ### `-u|--user <arg>`
 
@@ -433,9 +434,7 @@ on
 
 Executing txn_audit.sql to produce txn_audit.xml in XML format (shown using short options and without `--config` option)
 
-```
-$ groovysql -s vdb -n dbhost.mydomain.com:9999 -d itemdb -u appuser -p appword -f txn_audit.sql -o txn_audit.xml -F xml
-```
+    $ groovysql -s vdb -n dbhost.mydomain.com:9999 -d itemdb -u appuser -p appword -f txn_audit.sql -o txn_audit.xml -F xml
 
 ### Sample executions
 
