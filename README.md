@@ -106,28 +106,28 @@ The `--config` option allows the database connection information to be stored in
 single option for convenience. It is handy for specifying the `--scheme`, `--node`, `--database`, `--user`, and
 `--password` options, as well as other options.
 
-| short | long option              | description                                    |
+| short option | long option              | description                                    |
 |:-----:|--------------------------|------------------------------------------------|
-|  -a   | `--append`               | allows output to append to an existing file    |
-|  -A   | `--authentication <arg>` | specify authentication via secrets management  |
-|  -c   | `--config <arg>`         | specifies a database configuration file        |
-|  -d   | `--database <arg>`       | specify database name                          |
-|  -f   | `--filein <arg>`         | specifies input filename containing SQL        |
-|  -F   | `--format <arg>`         | specify desired output format                  |
-|  -H   | `--csvheaders`           | output CSV headers                             |
-|  -h   | `--help`                 | displays this usage information                |
-|  -i   | `--interactive`          | run in interactive mode with editing/history   |
-|  -j   | `--jsonstyle <arg>`      | specify JSON style of quoted or standard       |
-|  -n   | `--node <arg>`           | specify database node/host name including port |
-|  -o   | `--fileout <arg>`        | specify output filename                        |
-|  -p   | `--password <arg>`       | specify database password                      |
-|  -s   | `--scheme <arg>`         | database scheme                                |
-|  -S   | `--sql <arg>`            | specify SQL statement                          |
-|  -t   | `--timestamps`           | timestamp output                               |
-|  -T   | `--testconnect <arg>`    | run a connection test                          |
-|  -u   | `--user <arg>`           | specify database username                      |
-|  -v   | `--verbose <arg>`        | specify verbose level                          |
-|  -w   | `--width <arg>`          | limit maximum text column width                |
+| `-a`  | `--append`               | allows output to append to an existing file    |
+| `-A`  | `--authentication <arg>` | specify authentication via secrets management  |
+| `-c`  | `--config <arg>`         | specifies a database configuration file        |
+| `-d`  | `--database <arg>`       | specify database name                          |
+| `-f`  | `--filein <arg>`         | specifies input filename containing SQL        |
+| `-F`  | `--format <arg>`         | specify desired output format                  |
+| `-H`  | `--csvheaders`           | output CSV headers                             |
+| `-h`  | `--help`                 | displays this usage information                |
+| `-i`  | `--interactive`          | run in interactive mode with editing/history   |
+| `-j`  | `--jsonstyle <arg>`      | specify JSON style of quoted or standard       |
+| `-n`  | `--node <arg>`           | specify database node/host name including port |
+| `-o`  | `--fileout <arg>`        | specify output filename                        |
+| `-p`  | `--password <arg>`       | specify database password                      |
+| `-s`  | `--scheme <arg>`         | database scheme                                |
+| `-S`  | `--sql <arg>`            | specify SQL statement                          |
+| `-t`  | `--timestamps`           | timestamp output                               |
+| `-T`  | `--testconnect <arg>`    | run a connection test                          |
+| `-u`  | `--user <arg>`           | specify database username                      |
+| `-v`  | `--verbose <arg>`        | specify verbose level                          |
+| `-w`  | `--width <arg>`          | limit maximum text column width                |
 
 ### `-a|--append`
 

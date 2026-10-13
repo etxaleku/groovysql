@@ -517,6 +517,14 @@ code {
     border-radius: 2pt;
 }
 
+/* Preserve monospace text in tables without a separate shaded box. */
+th code,
+td code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+}
+
 pre {
     margin: 12pt 0;
     padding: 12pt;
